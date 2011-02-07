@@ -1,6 +1,6 @@
 (ns timmcHW3.core
    "Core code. Use -main."
-   (:import [javax.swing SwingUtilities JFrame JPanel JMenu JMenuBar JMenuItem JButton]
+   (:import [javax.swing SwingUtilities UIManager JFrame JPanel JMenu JMenuBar JMenuItem JButton]
             [java.awt.event ActionListener])
    (:gen-class))
 
@@ -15,6 +15,7 @@
 (defn launch
    "Create and display the GUI."
    []
+   (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
    (def mb (doto (JMenuBar.)
               (.add (doto (JMenu. "Spline")
                        (.add (doto (JMenuItem. "Hello!")
