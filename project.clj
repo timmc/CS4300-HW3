@@ -3,5 +3,6 @@
   :dependencies [[org.clojure/clojure "1.2.0"]
                  [org.clojure/clojure-contrib "1.2.0"]]
   :main timmcHW3.core
+  :warn-on-reflection true
   :jar-name "timmc.HW3.jar"
   :uberjar-name "timmc.HW3-standalone.jar")
