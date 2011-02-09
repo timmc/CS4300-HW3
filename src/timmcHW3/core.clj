@@ -10,28 +10,54 @@
 
 ;-- State --;
 
+(def ^{:doc "Viewport's pixel center coordinates as [x y]."}
+   view-center
+   (ref [300 300]))
+
+; Resizing the window stretches the view.
+(def ^{:doc "Minimum extent of world to show in both width and height."}
+   view-minspect
+   (ref 60))
+
+(def ^{:doc "Chosen offset of rotation."}
+   view-offset
+   (ref (mk-offset 10 0)))
+
+(def ^{:doc "Rotation of viewport."}
+   view-rot (ref (/ Math/PI 4)))
+
 (def ^{:doc "Control polygon as coords list"} ;TODO better than cubic
    control-polygon (ref [(mk-loc -50 0)
                          (mk-loc 0 30)
                          (mk-loc 0 -30)
                          (mk-loc 5 0)]))
 
+(defn calc-tmat
+   "Calculate the world-to-viewport transformation matrix."
+   [win-w win-h]
+   (let [drag-x (crd-x @view-offset)
+         drag-y (crd-y @view-offset)
+         drag-trans (translator (- drag-x) (- drag-y))
+         minspect (min win-w win-h)
+         zoom (scalor (/ minspect @view-minspect))
+         flip (scalor 1 -1)
+         rot (rotator (- @view-rot))
+         centering-trans (translator (/ win-w 2) (/ win-h 2))]
+      (mat3xm centering-trans rot flip zoom drag-trans)))
+
 (defn ^Point2D$Double basic-trans ;XXX
    "Basic transformation"
    [wx wy]
-   (let [drag-trans (translator -10 0) ;user has dragged (10, 0) to center of screen
-         zoom (scalor 2) ; zoom in x2
-         flip (scalor 1 -1) ; screen coords are upside-down
-         rot (rotator (- (/ Math/PI 4))) ; rotate 45° CCW
-         centering-trans (translator 300 300) ;draw chosen centerpoint in center
-         tmat (mat3xm centering-trans rot flip zoom drag-trans)
+   (let [tmat (calc-tmat 600 600)
          [vx vy _] (mat3xv tmat [wx wy 1])]
+      #_(println wx wy "->" vx vy)
       (Point2D$Double. vx vy)))
 
 ;-- Math --;
 
 ;TODO: add {set,nudge}-{rotation,zoom,translation-{x,y}}! functions
 ;TODO: add functions to apply transforms to collections of coords
+
 (defn ^Path2D calc-path
    "Calculate a path based on the current control points."
    [] ;TODO accept polyline as arg?
