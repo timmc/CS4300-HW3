@@ -101,13 +101,13 @@
 
 ;-- Conversion --;
 
-(defn ^Point2D$Double world-to-view
+(defn ^Point2D$Double to-view
    "Transform world coordinates to view coordinates, dropping loc/offset distinction."
    [wc tmat]
    (let [[vx vy _] (mat3xv tmat wc)]
       (Point2D$Double. vx vy)))
 
-(defn view-to-world
+(defn from-view
    "Transform view coordinates (location or offset) to world coordinates."
    [^Point2D$Double vc, tmat, is-offset]
    (let [x (. vc x)
