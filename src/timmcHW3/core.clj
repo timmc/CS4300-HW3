@@ -78,18 +78,20 @@
    [^Graphics2D g, ^Color c, x, y]
    (let [p (basic-trans x y)]
       (. g setPaint c)
-      (. g fill (Rectangle2D$Double. (. p x) (. p y) 3 3))))
+      (. g fill (Rectangle2D$Double. (- (. p x) 3) (- (. p y) 3) 6 6))))
 
 (defn render
    "Draw the world."
    [^Graphics2D g]
    (doto g
       (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
+      (.setColor (Color. 50 50 50))
+      (.fill (Rectangle2D$Double. 0 0 600 600))
       (.setColor Color/YELLOW)
       (.draw (Rectangle2D$Double. 300 0 0.1 600))
       (.draw (Rectangle2D$Double. 0 300 600 0.1))
       (.draw (calc-path)))
-   (test-draw-point g Color/BLACK 0 0) ; center
+   (test-draw-point g Color/WHITE 0 0) ; center
    (test-draw-point g Color/GREEN -10 0) ; left
    (test-draw-point g Color/RED 10 0) ; right
    (test-draw-point g Color/BLUE 0 10)) ; up
