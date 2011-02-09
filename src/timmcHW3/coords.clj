@@ -9,12 +9,11 @@
 ;;; Matrices are all 3x3 and represented as a column vector of 3 row vectors.
 ;;; All vectors are 3-element and are 1-level Clojure vectors.
 
-;-- Math --;
+;-- Matrices --;
 
-(defn mat3xm
-   "Multiply zero or more 3x3 matrices."
+(defn- mat3xm-folder
+   "Multiply exactly 0 or 2 3x3 matrices."
    ([] [[1 0 0][0 1 0][0 0 1]])
-   ([a] a)
    ([a b]
     (let [[[a00 a01 a02]
            [a10 a11 a12]
@@ -30,9 +29,12 @@
          (+ (* a10 b02) (* a11 b12) (* a12 b22))]
         [(+ (* a20 b00) (* a21 b10) (* a22 b20))
          (+ (* a20 b01) (* a21 b11) (* a22 b21))
-         (+ (* a20 b02) (* a21 b12) (* a22 b22))]]))
-   ([a b & more]
-    (apply mat3xm (mat3xm a b) more)))
+         (+ (* a20 b02) (* a21 b12) (* a22 b22))]])))
+
+(defn mat3xm
+   "Multiply zero or more 3x3 matrices."
+   [& ms]
+   (reduce mat3xm-folder ms))
 
 (defn mat3xv
    "Multiply a 3x3 matrix by a column vector."
