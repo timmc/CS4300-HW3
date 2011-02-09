@@ -19,14 +19,13 @@
 (defn ^Point2D$Double basic-trans ;XXX
    "Basic transformation"
    [wx wy]
-   (let [drag-trans (translator -200 -100) ;user has dragged (200, 100) to center of screen
-         zoom (scalor 0.5) ; zoom in x2
+   (let [drag-trans (translator -10 0) ;user has dragged (10, 0) to center of screen
+         zoom (scalor 2) ; zoom in x2
          flip (scalor 1 -1) ; screen coords are upside-down
-         rot (rotator (/ Math/PI 4)) ; rotate 45° CCW
+         rot (rotator (- (/ Math/PI 4))) ; rotate 45° CCW
          centering-trans (translator 300 300) ;draw chosen centerpoint in center
          tmat (mat3xm centering-trans rot flip zoom drag-trans)
          [vx vy _] (mat3xv tmat [wx wy 1])]
-      (println wx wy "->" vx vy)
       (Point2D$Double. vx vy)))
 
 ;-- Math --;
@@ -60,12 +59,14 @@
    [^Graphics2D g]
    (doto g
       (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
-      (.setColor Color/RED)
+      (.setColor Color/YELLOW)
+      (.draw (Rectangle2D$Double. 300 0 0.1 600))
+      (.draw (Rectangle2D$Double. 0 300 600 0.1))
       (.draw (calc-path)))
    (test-draw-point g Color/BLACK 0 0) ; center
-   (test-draw-point g Color/GREEN -100 0) ; left
-   (test-draw-point g Color/RED 100 0) ; right
-   (test-draw-point g Color/BLUE 0 100)) ; up
+   (test-draw-point g Color/GREEN -10 0) ; left
+   (test-draw-point g Color/RED 10 0) ; right
+   (test-draw-point g Color/BLUE 0 10)) ; up
 
 ;-- Menu items --;
 
