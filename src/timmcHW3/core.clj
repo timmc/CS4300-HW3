@@ -19,10 +19,12 @@
 (defn ^Point2D$Double basic-trans ;XXX
    "Basic transformation"
    [wx wy]
-   (let [rot [[0.707 -0.707 0][0.707 0.707 0][0 0 1]]
-         scale [[0.5 0 0][0 -0.5 0][0 0 1]]
-         trans [[0 0 300][0 0 300][0 0 1]]
-         tmat (mat3xm trans rot scale)
+   (let [drag-trans (translator -200 -100) ;user has dragged (200, 100) to center of screen
+         zoom (scalor 0.5) ; zoom in x2
+         flip (scalor 1 -1) ; screen coords are upside-down
+         rot (rotator (/ Math/PI 4)) ; rotate 45° CCW
+         centering-trans (translator 300 300) ;draw chosen centerpoint in center
+         tmat (mat3xm centering-trans rot flip zoom drag-trans)
          [vx vy _] (mat3xv tmat [wx wy 1])]
       (println wx wy "->" vx vy)
       (Point2D$Double. vx vy)))
@@ -46,14 +48,24 @@
 
 ;-- Rendering --;
 
+(defn test-draw-point
+   "Draw a test point at the given coords."
+   [^Graphics2D g, ^Color c, x, y]
+   (let [p (basic-trans x y)]
+      (. g setPaint c)
+      (. g fill (Rectangle2D$Double. (. p x) (. p y) 3 3))))
+
 (defn render
    "Draw the world."
    [^Graphics2D g]
-   (let [center (basic-trans 0 0)]
-      (. g setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
-      (. g setColor Color/RED)
-      (. g fill (Rectangle2D$Double. (. center x) (. center y) 3 3))
-      (. g draw (calc-path))))
+   (doto g
+      (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
+      (.setColor Color/RED)
+      (.draw (calc-path)))
+   (test-draw-point g Color/BLACK 0 0) ; center
+   (test-draw-point g Color/GREEN -100 0) ; left
+   (test-draw-point g Color/RED 100 0) ; right
+   (test-draw-point g Color/BLUE 0 100)) ; up
 
 ;-- Menu items --;
 

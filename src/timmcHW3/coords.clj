@@ -73,6 +73,32 @@
 
 ;-- Transformations --;
 
+(defn translator
+   "Produce a transformation matrix for moving the origin by (x, y)."
+   [x y]
+   [[1 0 x]
+    [0 1 y]
+    [0 0 1]])
+
+(defn rotator
+   "Produce a transformation matrix for rotating CCW about the origin by phi radians."
+   [phi]
+   (let [cp (Math/cos phi)
+         sp (Math/sin phi)]
+      [[cp (- sp) 0]
+       [sp cp 0]
+       [0 0 1]]))
+
+(defn scalor
+   "Produce a transformation matrix for scaling from the origin."
+   ([sx sy]
+    [[sx 0  0]
+     [0  sy 0]
+     [0  0  1]])
+   ([s]
+    (scalor s s)))
+    
+
 ;-- Conversion --;
 
 (defn ^Point2D$Double world-to-view
