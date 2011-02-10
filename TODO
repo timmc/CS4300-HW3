@@ -1,0 +1,1 @@
+* Use a stack with references to a map to handle the undo history.

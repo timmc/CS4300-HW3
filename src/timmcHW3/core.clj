@@ -3,9 +3,8 @@
    (:import [javax.swing SwingUtilities UIManager
                          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton]
             [java.awt BorderLayout Graphics2D RenderingHints Dimension Color Component]
-            [java.awt.geom Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
-            [java.awt.event ActionListener ComponentAdapter])
-   (:use (timmcHW3 coords))
+            [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
+            [java.awt.event ActionListener ComponentAdapter])    
    (:gen-class))
 
 ;-- Conventions --;
@@ -31,66 +30,66 @@
 ;-- Viewpoint --;
 
 ; Translation: User drags new world point to center of window.
-(def ^{:doc "Chosen offset of rotation."}
-   view-offset
-   (ref (mk-offset 10 0)))
+(def ^{:doc "Chosen center of rotation."}
+   rot-center
+   (ref [0 0]))
 
 ; Scale: Resizing the window stretches the view.
 (def ^{:doc "Minimum extent of world to show in both width and height."}
    view-minspect
-   (ref 60))
+   (ref 200))
 
 ; Rotation: Around the center of the window.
 (def ^{:doc "Rotation of viewport."}
-   view-rot (ref (/ Math/PI 4)))
+   view-rot (ref 0))
 
 ; Centering: This is the center of rotation of the viewpoint.
 (def ^{:doc "Viewport's pixel center coordinates as [x y]."}
    view-center
-   (ref [1 1]))
+   (ref [0 0]))
 
-(def ^{:doc "World-to-viewport transform."}
-   tmat-to-view
-   (ref (mat3xm)))
+(def ^{:doc "World-to-viewport transform." :tag AffineTransform}
+   xform-to-view
+   (ref (AffineTransform.)))
 
-(def ^{:doc "The inverse transform, viewport-to-world."}
-   tmat-from-view
-   (ref (mat3xm)))
+(def ^{:doc "The inverse transform, viewport-to-world." :tag AffineTransform}
+   xform-from-view
+   (ref (AffineTransform.)))
 
-(def ^{:doc "Dimensions of viewport."}
+(def ^{:doc "Dimensions of viewport." :tag Dimension}
    viewport-dim
    (ref (Dimension. 1 1)))
 
-(defn calc-tmat
-   "Calculate the world-to-viewport transformation matrix."
+(defn ^AffineTransform calc-xform
+   "Calculate the world-to-viewport transformation."
    [view-w view-h]
    (dosync
-      (let [drag-x (crd-x @view-offset)
-            drag-y (crd-y @view-offset)
-            drag-trans (translator (- drag-x) (- drag-y))
+      (let [[drag-x drag-y] @rot-center
             minspect (min view-w view-h)
-            zoom (scalor (/ minspect @view-minspect))
-            flip (scalor 1 -1)
-            rot (rotator (- @view-rot))
-            centering-trans (translator (/ view-w 2) (/ view-h 2))]
-         (mat3xm centering-trans rot flip zoom drag-trans))))
+            magnification (/ minspect @view-minspect)]
+         (doto (AffineTransform.)
+            (.translate (/ view-w 2) (/ view-h 2))
+            (.rotate (- @view-rot))
+            (.scale 1 -1) ; flip y coords
+            (.scale magnification magnification) ; zoom
+            (.translate (- drag-x) (- drag-y))))))
 
-(defn update-tmat!
-   "Update the world-to-viewpoint and inverse transformation matrices."
+(defn update-xform!
+   "Update the world-to-viewpoint and inverse transformations."
    []
    (dosync
       (let [[w h] (de-dim @viewport-dim)
-            tmat (calc-tmat w h)]
-          (ref-set tmat-to-view tmat)
-          #_(ref-set tmat-from-view (mat3-inverse tmat))))) ;TODO inverse
+            at (calc-xform w h)]
+          (ref-set xform-to-view at)
+          (ref-set xform-from-view (. at createInverse)))))
 
 ;-- Data --;
 
 (def ^{:doc "Control polygon as coords list"} ;TODO better than cubic
-   control-polygon (ref [(mk-loc -50 0)
-                         (mk-loc 0 30)
-                         (mk-loc 0 -30)
-                         (mk-loc 5 0)]))
+   control-polygon (ref (list [-50 0]
+                              [0 30]
+                              [0 -30]
+                              [5 0])))
 
 ;-- Math --;
 
@@ -101,23 +100,31 @@
    "Calculate a path based on the current control points."
    [] ;TODO accept polyline as arg?
    (let [points @control-polygon
-         path (Path2D$Double.)]
+         ^Path2D path (Path2D$Double.)]
       (when (= (count points) 4)
          (let [[p0 p1 p2 p3] points]
-            (. path moveTo (crd-x p0) (crd-y p0))
-            (. path curveTo (crd-x p1) (crd-y p1)
-                            (crd-x p2) (crd-y p2)
-                            (crd-x p3) (crd-y p3))))
-      path))
+            (. path moveTo (p0 0) (p0 1))
+            (. path curveTo (p1 0) (p1 1)
+                            (p2 0) (p2 1)
+                            (p3 0) (p3 1))))
+      (. ^AffineTransform @xform-to-view createTransformedShape path)))
+
+(defn ^Point2D loc-to-view
+   "Transform a location from world to viewport coords."
+   ([wx wy]
+    (. ^AffineTransform @xform-to-view transform (Point2D$Double. wx wy) nil))
+   ([^Point2D p]
+    (. ^AffineTransform @xform-to-view transform p nil)))
 
 ;-- Rendering --;
 
 (defn test-draw-point
    "Draw a test point at the given coords."
-   [^Graphics2D g, ^Color c, x, y]
-   (let [[p-x p-y] (de-pt (to-view (mk-loc x y) @tmat-to-view))]
-      (. g setPaint c)
-      (. g fill (Rectangle2D$Double. (- p-x 3) (- p-y 3) 6 6))))
+   [^Graphics2D g, ^Color c, wx, wy]
+   (let [[vx vy] (de-pt (loc-to-view wx wy))]
+      (doto g
+         (.setPaint c)
+         (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
 
 (defn render
    "Draw the world."
@@ -133,9 +140,9 @@
          (.draw (Rectangle2D$Double. 0 cy w 0.1))
          (.draw (calc-path))))
    (test-draw-point g Color/WHITE 0 0) ; center
-   (test-draw-point g Color/GREEN -10 0) ; left
-   (test-draw-point g Color/RED 10 0) ; right
-   (test-draw-point g Color/BLUE 0 10)) ; up
+   (test-draw-point g Color/GREEN -50 0) ; left
+   (test-draw-point g Color/RED 50 0) ; right
+   (test-draw-point g Color/BLUE 0 50)) ; up
     
 ;-- Menu items --;
 
@@ -168,7 +175,7 @@
             [dim-w dim-h] (de-dim dim)]
          (ref-set view-center (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
          (ref-set viewport-dim dim)
-         (update-tmat!))))
+         (update-xform!))))
 
 (def ^{:doc "Drawing canvas" :tag JComponent}
    canvas
