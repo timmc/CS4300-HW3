@@ -4,8 +4,11 @@
                          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton]
             [java.awt BorderLayout Graphics2D RenderingHints Dimension Color Component]
             [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
-            [java.awt.event ActionListener ComponentAdapter])    
+            [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
+    
+
+(declare ^JComponent canvas)
 
 ;-- Conventions --;
 
@@ -85,11 +88,45 @@
 
 ;-- Data --;
 
-(def ^{:doc "Control polygon as coords list"} ;TODO better than cubic
-   control-polygon (ref (list [-50 0]
-                              [0 30]
-                              [0 -30]
-                              [5 0])))
+(def ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
+   user-data
+   (ref
+      {:curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
+        ()
+       :pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
+        ()
+      }))
+
+(defn add-pending-point!
+   "Add a pending point to the world."
+   [state wp]
+   (let [old-pending (:pending-points state)
+         new-pend (conj (if (= (count old-pending) 4)
+                          () ; clear it out if too many
+                          old-pending)
+                     wp)]
+      (assoc state :pending-points new-pend)))
+
+;-- History --;
+
+(def ^{:doc "Undo buffer."}
+   data-past (ref ()))
+
+(def ^{:doc "Redo buffer."}
+   data-future (ref ()))
+
+; TODO define helper arity to take a keyword for just acting on that element
+(defn act!
+   "Call f with current user-data state and any additional arguments, accepting result as new state."
+   [f & args]
+   (dosync
+      (let [cur-state @user-data
+            next-state (apply f cur-state args)]
+         (ref-set data-past (conj @data-past cur-state))
+         (ref-set data-future ()) ; destroy the future
+         (ref-set user-data next-state))))
+
+;TODO: define undo! and redo!
 
 ;-- Math --;
 
@@ -99,14 +136,14 @@
 (defn ^Path2D calc-path
    "Calculate a path based on the current control points."
    [] ;TODO accept polyline as arg?
-   (let [points @control-polygon
+   (let [points (reverse (:pending-points @user-data))
          ^Path2D path (Path2D$Double.)]
       (when (= (count points) 4)
          (let [[p0 p1 p2 p3] points]
-            (.moveTo path (p0 0) (p0 1))
-            (.curveTo path (p1 0) (p1 1)
-                           (p2 0) (p2 1)
-                           (p3 0) (p3 1))))
+            (.moveTo path (.getX p0) (.getY p0))
+            (.curveTo path (.getX p1) (.getY p1)
+                           (.getX p2) (.getY p2)
+                           (.getX p3) (.getY p3))))
       (.createTransformedShape ^AffineTransform @xform-to-view path)))
 
 (defn ^Point2D loc-to-view
@@ -115,6 +152,13 @@
     (.transform ^AffineTransform @xform-to-view (Point2D$Double. wx wy) nil))
    ([^Point2D p]
     (.transform ^AffineTransform @xform-to-view p nil)))
+
+(defn ^Point2D loc-from-view
+   "Transform a location from viewport to world coords."
+   ([vx vy]
+    (.transform ^AffineTransform @xform-from-view (Point2D$Double. vx vy) nil))
+   ([^Point2D p]
+    (.transform ^AffineTransform @xform-from-view p nil)))
 
 ;-- Rendering --;
 
@@ -143,12 +187,33 @@
    (test-draw-point g Color/GREEN -50 0) ; left
    (test-draw-point g Color/RED 50 0) ; right
    (test-draw-point g Color/BLUE 0 50)) ; up
-    
+
 ;-- Menu items --;
 
 (def mi-hello
    (proxy [ActionListener] []
       (actionPerformed [e] (println "Clicked!" e))))
+
+;-- Event interpretation --;
+
+(defn ask-redraw
+   "Ask for the canvas to be redrawn."
+   []
+   (.repaint canvas))
+
+(defn canvas-click
+   [^MouseEvent e]   
+   (act! add-pending-point! (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
+   (ask-redraw)
+   )
+
+(defn canvas-drag
+   [^MouseMoveEvent e]
+   );TODO
+
+(defn canvas-scroll
+   [^MouseWheelEvent e]
+   );TODO
 
 ;-- Components --;
 
@@ -164,8 +229,6 @@
    (doto (JPanel.)
       (.setMinimumSize (Dimension. 300 600))))
 
-
-(declare ^JComponent canvas)
 
 (defn update-canvas-depends!
    "Update variables that depend on the canvas size or other state."
@@ -184,6 +247,15 @@
       (.setDoubleBuffered true)
       (.setMinimumSize (Dimension. 10 10))
       (.setPreferredSize (Dimension. 600 600))
+      (.addMouseListener
+         (proxy [MouseAdapter] []
+            (mouseClicked [e] (canvas-click e))))
+      (.addMouseMotionListener
+         (proxy [MouseMotionAdapter] []
+            (mouseDragged [e] (canvas-drag e))))
+      (.addMouseWheelListener
+         (proxy [MouseWheelListener] []
+            (mouseWheelMoved [e] (canvas-scroll e))))
       (.addComponentListener
          (proxy [ComponentAdapter] []
             (componentResized [_] (update-canvas-depends!))))))
