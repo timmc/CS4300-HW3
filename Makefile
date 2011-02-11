@@ -20,7 +20,7 @@ PKGDIR := pkg/$(PROJNAME)
 
 pkg: pkg-clean
 	mkdir -p $(PKGDIR)/
-	cp README $(PKGDIR)/README.txt
+	cp README-CS4300 $(PKGDIR)/README.txt
 	cp -r src/ $(PKGDIR)/src
 	cp project.clj deploy/{run,setup}.sh $(PKGDIR)/
 	tar -czf $(PACKAGE_FILE) --directory pkg/ $(PROJNAME)/
