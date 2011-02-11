@@ -1,14 +1,17 @@
 (ns timmcHW3.core
    "Core code. Use -main."
    (:import [javax.swing SwingUtilities UIManager
-                         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton]
+                         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton
+                         KeyStroke]
             [java.awt BorderLayout Graphics2D RenderingHints Dimension Color Component]
             [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
             [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
     
 
-(declare ^JComponent canvas)
+(declare ^JComponent canvas
+         ^JMenuItem mi-undo
+         ^JMenuItem mi-redo)
 
 ;-- Conventions --;
 
@@ -115,6 +118,22 @@
 (def ^{:doc "Redo buffer."}
    data-future (ref ()))
 
+(defn can-undo?
+   "Return true if there is undo history."
+   []
+   (not (empty? @data-past)))
+
+(defn can-redo?
+   "Return true if there is redo history."
+   []
+   (not (empty? @data-future)))
+
+(defn reflect-history-state!
+   "Reflect current undo/redo state into GUI."
+   []
+   (.setEnabled mi-undo (can-undo?))
+   (.setEnabled mi-redo (can-redo?)))
+
 ; TODO define helper arity to take a keyword for just acting on that element
 (defn act!
    "Call f with current user-data state and any additional arguments, accepting result as new state."
@@ -124,9 +143,32 @@
             next-state (apply f cur-state args)]
          (ref-set data-past (conj @data-past cur-state))
          (ref-set data-future ()) ; destroy the future
-         (ref-set user-data next-state))))
+         (ref-set user-data next-state)))
+   (reflect-history-state!))
 
-;TODO: define undo! and redo!
+(defn- slide-history!
+   "Push current state onto 'to' and pop 'from' as new state."
+   [from state to]
+   (dosync
+      (ref-set to (conj @to @state))
+      (ref-set user-data (first @from))
+      (ref-set from (rest @from))))
+
+(defn undo!
+   "Undo to previous state, if possible. Does not trigger redraw."
+   []
+   (dosync
+      (when (can-undo?)
+         (slide-history! data-past user-data data-future)))
+   (reflect-history-state!))
+
+(defn redo!
+   "Redo to subsequent state, if possible. Does not trigger redraw."
+   []
+   (dosync
+      (when (can-redo?)
+         (slide-history! data-future user-data data-past)))
+   (reflect-history-state!))
 
 ;-- Math --;
 
@@ -139,7 +181,10 @@
    (let [points (reverse (:pending-points @user-data))
          ^Path2D path (Path2D$Double.)]
       (when (= (count points) 4)
-         (let [[p0 p1 p2 p3] points]
+         (let [[^Point2D p0
+                ^Point2D p1
+                ^Point2D p2
+                ^Point2D p3] points]
             (.moveTo path (.getX p0) (.getY p0))
             (.curveTo path (.getX p1) (.getY p1)
                            (.getX p2) (.getY p2)
@@ -188,12 +233,6 @@
    (test-draw-point g Color/RED 50 0) ; right
    (test-draw-point g Color/BLUE 0 50)) ; up
 
-;-- Menu items --;
-
-(def mi-hello
-   (proxy [ActionListener] []
-      (actionPerformed [e] (println "Clicked!" e))))
-
 ;-- Event interpretation --;
 
 (defn ask-redraw
@@ -202,6 +241,7 @@
    (.repaint canvas))
 
 (defn canvas-click
+   "A click event has occurred on the canvas."
    [^MouseEvent e]   
    (act! add-pending-point! (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
    (ask-redraw)
@@ -217,13 +257,33 @@
 
 ;-- Components --;
 
+(def ^JMenuItem mi-undo
+   (doto (JMenuItem. "Undo")
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (undo!)
+               (ask-redraw))))
+      (.setEnabled false)
+      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
+
+(def ^JMenuItem mi-redo
+   (doto (JMenuItem. "Redo")
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (redo!)
+               (ask-redraw))))
+      (.setEnabled false)
+      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
+
 (def ^{:doc "Menu bar for window."}
    menu
    (doto (JMenuBar.)
       (.add (doto (JMenu. "Spline")
-               (.add (doto (JMenuItem. "Hello!")
-                        (.addActionListener mi-hello)))))))
-
+               (.add mi-undo)
+               (.add mi-redo)))))
+    
 (def ^{:doc "Control panel" :tag JPanel}
    controls
    (doto (JPanel.)
