@@ -94,7 +94,9 @@
 (def ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
    user-data
    (ref
-      {:curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
+      {:act ; The act that produced this state, e.g. "vertex drag"
+        "Initialization"
+       :curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
         ()
        :pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
         ()
@@ -131,16 +133,28 @@
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
    []
-   (.setEnabled mi-undo (can-undo?))
-   (.setEnabled mi-redo (can-redo?)))
-
+   (if (can-undo?)
+      (doto mi-undo
+         (.setEnabled true)
+         (.setText (str "Undo " (:act @user-data))))
+      (doto mi-undo
+         (.setEnabled false)
+         (.setText "Nothing to undo")))
+   (if (can-redo?)
+      (doto mi-redo
+         (.setEnabled true)
+         (.setText (str "Redo " (:act (first @data-future)))))
+      (doto mi-redo
+         (.setEnabled false)
+         (.setText "Nothing to redo"))))
+    
 ; TODO define helper arity to take a keyword for just acting on that element
 (defn act!
    "Call f with current user-data state and any additional arguments, accepting result as new state."
-   [f & args]
+   [act f & args]
    (dosync
       (let [cur-state @user-data
-            next-state (apply f cur-state args)]
+            next-state (assoc (apply f cur-state args) :act act)]
          (ref-set data-past (conj @data-past cur-state))
          (ref-set data-future ()) ; destroy the future
          (ref-set user-data next-state)))
@@ -243,7 +257,7 @@
 (defn canvas-click
    "A click event has occurred on the canvas."
    [^MouseEvent e]   
-   (act! add-pending-point! (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
+   (act! "add vertex" add-pending-point! (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
    (ask-redraw)
    )
 
