@@ -15,12 +15,12 @@
 (defn de-dim
    "Read a Dimension object into a 2-vector of width, height."
    [^Dimension d]
-   [(. d width) (. d height)])
+   [(.width d) (.height d)])
 
 (defn de-pt
    "Read a Point2D$Double object into a 2-vector of x, y."
    [^Point2D$Double p]
-   [(. p x) (. p y)])
+   [(.getX p) (.getY p)])
 
 ;-- Constants --;
 
@@ -81,7 +81,7 @@
       (let [[w h] (de-dim @viewport-dim)
             at (calc-xform w h)]
           (ref-set xform-to-view at)
-          (ref-set xform-from-view (. at createInverse)))))
+          (ref-set xform-from-view (.createInverse at)))))
 
 ;-- Data --;
 
@@ -103,18 +103,18 @@
          ^Path2D path (Path2D$Double.)]
       (when (= (count points) 4)
          (let [[p0 p1 p2 p3] points]
-            (. path moveTo (p0 0) (p0 1))
-            (. path curveTo (p1 0) (p1 1)
-                            (p2 0) (p2 1)
-                            (p3 0) (p3 1))))
-      (. ^AffineTransform @xform-to-view createTransformedShape path)))
+            (.moveTo path (p0 0) (p0 1))
+            (.curveTo path (p1 0) (p1 1)
+                           (p2 0) (p2 1)
+                           (p3 0) (p3 1))))
+      (.createTransformedShape ^AffineTransform @xform-to-view path)))
 
 (defn ^Point2D loc-to-view
    "Transform a location from world to viewport coords."
    ([wx wy]
-    (. ^AffineTransform @xform-to-view transform (Point2D$Double. wx wy) nil))
+    (.transform ^AffineTransform @xform-to-view (Point2D$Double. wx wy) nil))
    ([^Point2D p]
-    (. ^AffineTransform @xform-to-view transform p nil)))
+    (.transform ^AffineTransform @xform-to-view p nil)))
 
 ;-- Rendering --;
 
@@ -171,7 +171,7 @@
    "Update variables that depend on the canvas size or other state."
    []
    (dosync
-      (let [^Dimension dim (. canvas getSize)
+      (let [^Dimension dim (.getSize canvas)
             [dim-w dim-h] (de-dim dim)]
          (ref-set view-center (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
          (ref-set viewport-dim dim)
@@ -202,7 +202,7 @@
                   (.add canvas BorderLayout/CENTER)
                   (.pack))]
       (update-canvas-depends!)
-      (. frame setVisible true)))
+      (.setVisible frame true)))
 
 (defn -main
    "Main sequence" ;FIXME
