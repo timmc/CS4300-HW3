@@ -4,6 +4,9 @@ SHELL:=/bin/bash
 build:
 	lein compile
 
+test:
+	lein test
+
 run:
 	lein run $(n)
 
@@ -46,7 +49,7 @@ deploy: pkg deploy-ready
 test-deploy: deploy
 	ssh -X $(CCIS_MACHINE) '~/private/CS4300-deploy/test.sh'
 
-.PHONY: pkg build run todo deploy
+.PHONY: pkg build test run todo deploy
 
 .SILENT:
 

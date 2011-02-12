@@ -13,6 +13,13 @@
          ^JMenuItem mi-undo
          ^JMenuItem mi-redo)
 
+(defn complete-update-in
+   "A version of update-in that works with an empty sequence of keys."
+   [m ks f & args]
+   (if (seq ks)
+      (apply update-in m ks f args)
+      (apply f m args)))
+
 ;-- Conventions --;
 
 ;;; Coordinates, points, and 2-vectors are represented as [x y] pairs.
@@ -102,7 +109,8 @@
         ()
       }))
 
-(defn add-pending-point!
+(defn ^{:statekeys [] :actname "add vertex"}
+   add-pending-point
    "Add a pending point to the world."
    [state wp]
    (let [old-pending (:pending-points state)
@@ -150,17 +158,20 @@
     
 ; TODO define helper arity to take a keyword for just acting on that element
 (defn act!
-   "Call f with current user-data state and any additional arguments, accepting result as new state."
-   [act f & args]
+   "Call f with current user-data state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :statekey and :actname metadata found on f."
+   [f overrides & args]
    (dosync
       (let [cur-state @user-data
-            next-state (assoc (apply f cur-state args) :act act)]
+            fkeys (select-keys (meta f) [:actname])
+            metadata (merge fkeys overrides)
+            next-state (apply complete-update-in cur-state (:statekeys (meta f)) f args)
+            next-state (assoc next-state :act (:actname metadata))]
          (ref-set data-past (conj @data-past cur-state))
          (ref-set data-future ()) ; destroy the future
          (ref-set user-data next-state)))
    (reflect-history-state!))
 
-(defn- slide-history!
+(defn slide-history!
    "Push current state onto 'to' and pop 'from' as new state."
    [from state to]
    (dosync
@@ -257,7 +268,7 @@
 (defn canvas-click
    "A click event has occurred on the canvas."
    [^MouseEvent e]   
-   (act! "add vertex" add-pending-point! (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
+   (act! add-pending-point {} (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
    (ask-redraw)
    )
 
