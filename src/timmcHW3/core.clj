@@ -7,13 +7,12 @@
             [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
             [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
-    
-(declare *state*)
 
-(defn st
-   "Get a piece of state."
-   [&ks]
-   (get-in @*state* ks))
+;-- Globals --;
+
+(declare ^JComponent canvas
+         ^JMenuItem mi-undo
+         ^JMenuItem mi-redo)
 
 ;-- Fixes --;
 
@@ -95,27 +94,31 @@
      viewport-dim
    ])
 
-(defn ^Viewpoint new-viewport
-   "Make an initial viewpoint."
-   []
-   (Viewpoint. [0 0]
-               200
-               0
-               [0 0]
-               (AffineTransform.)
-               (AffineTransform.)
-               (Dimension. 1 1)))
+(def ^{:doc "The viewpoint's state."}
+   *view*
+   (ref (Viewpoint. [0 0]
+                    200
+                    0
+                    [0 0]
+                    (AffineTransform.)
+                    (AffineTransform.)
+                    (Dimension. 1 1))))
+
+(defn view
+   "Accessor for *view*"
+   [& ks]
+   (get-in @*view* ks))
 
 (defn ^AffineTransform calc-xform
    "Calculate the world-to-viewport transformation."
    [view-w view-h]
    (dosync
-      (let [[drag-x drag-y] (st :view :rot-center)
+      (let [[drag-x drag-y] (view :rot-center)
             minspect (min view-w view-h)
-            magnification (/ minspect (st :view :view-minspect))]
+            magnification (/ minspect (view :view-minspect))]
          (doto (AffineTransform.)
             (.translate (/ view-w 2) (/ view-h 2))
-            (.rotate (- (st :view :view-rot)))
+            (.rotate (- (view :view-rot)))
             (.scale 1 -1) ; flip y coords
             (.scale magnification magnification) ; zoom
             (.translate (- drag-x) (- drag-y))))))
@@ -124,26 +127,14 @@
    "Update the world-to-viewpoint and inverse transformations."
    []
    (dosync
-      (let [[w h] (de-dim (st :view :viewport-dim))
+      (let [[w h] (de-dim (view :viewport-dim))
             at (calc-xform w h)]
-          (assoc-in-ref! *state*
-             [:view :xform-to-view] at
-             [:view :xform-from-view] (.createInverse at)))))
+          (assoc-in-ref! *view*
+             [:xform-to-view] at
+             [:xform-from-view] (.createInverse at)))))
 
 ;-- State --;
 
-(defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
-   UserData
-   [act ; The act that produced this state, e.g. "vertex drag"
-    curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
-    pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
-   ])
-
-(defn ^UserData new-userdata
-   "Make default userdata."
-   []
-   (UserData. "Initialization" [] []))
-    
 ;;; Modes:
 ; :initializing
 ; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
@@ -158,44 +149,51 @@
 (defrecord ^{:doc "Whole-program state."}
    ProgState
    [mode ; overall mode
-    view ; viewpoint
-    udata ; user data
-    data-past ; Undo buffer
-    data-future ; Redo buffer
    ])
 
-(defn ^ProgState new-progstate
-   "Create default program state."
-   []
-   (ProgState. :initialization (new-viewport) (new-userdata) () ()))
-
-(def ^{:doc "Global pointer to current state."} *state*
-   (ref (make-progstate)))
+(def ^{:doc "Global pointer to current state."} state
+   (ref (ProgState. :initialization)))
 
 ;-- Data --;
 
-(defn ^{:statekeys [] :actname "add vertex"}
+(defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
+   UserData
+   [act ; The act that produced this state, e.g. "vertex drag"
+    curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
+    pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
+   ])
+
+(def ^{:doc "User data that needs undo/redo."} *udata*
+   (ref (UserData. "Initialization" [] [])))
+
+(defn ^{:udata-sel [] :actname "add vertex"}
    add-pending-point
    "Add a pending point to the world."
-   [state wp]
-   (let [old-pending (:pending-points state)
+   [^UserData udata, ^Point2D wp]
+   (let [old-pending (:pending-points udata)
          new-pend (conj (if (= (count old-pending) 4)
                           () ; clear it out if too many
                           old-pending)
                      wp)]
-      (assoc state :pending-points new-pend)))
+      (assoc udata :pending-points new-pend)))
 
 ;-- History --;
+
+(def ^{:doc "Undo buffer."}
+   data-past (ref ()))
+
+(def ^{:doc "Redo buffer."}
+   data-future (ref ()))
 
 (defn can-undo?
    "Return true if there is undo history."
    []
-   (not (empty? (:data-past @*state*))))
+   (not (empty? @data-past)))
 
 (defn can-redo?
    "Return true if there is redo history."
    []
-   (not (empty? (:data-future @*state*))))
+   (not (empty? @data-future )))
 
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
@@ -203,7 +201,7 @@
    (if (can-undo?)
       (doto mi-undo
          (.setEnabled true)
-         (.setText (str "Undo " (:act @user-data))))
+         (.setText (str "Undo " (:act @*udata*))))
       (doto mi-undo
          (.setEnabled false)
          (.setText "Nothing to undo")))
@@ -217,17 +215,17 @@
     
 ; TODO define helper arity to take a keyword for just acting on that element
 (defn act!
-   "Call f with current user-data state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :statekey and :actname metadata found on f."
+   "Call f with current *udata* state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :udata-sel and :actname metadata found on f."
    [f overrides & args]
    (dosync
-      (let [cur-state (:udata @*state*)
+      (let [cur-state @*udata*
             fkeys (select-keys (meta f) [:actname])
             metadata (merge fkeys overrides)
-            next-state (apply up-in0 cur-state (:statekeys (meta f)) f args)
+            next-state (apply update-in0 cur-state (:udata-sel (meta f)) f args)
             next-state (assoc next-state :act (:actname metadata))]
-         (ref-set data-past (conj (:data-past @*state*) cur-state))
+         (ref-set data-past (conj @data-past cur-state))
          (ref-set data-future ()) ; destroy the future
-         (ref-set user-data next-state)))
+         (ref-set *udata* next-state)))
    (reflect-history-state!))
 
 (defn slide-history!
@@ -235,7 +233,7 @@
    [from state to]
    (dosync
       (ref-set to (conj @to @state))
-      (ref-set user-data (first @from))
+      (ref-set *udata* (first @from))
       (ref-set from (rest @from))))
 
 (defn undo!
@@ -243,7 +241,7 @@
    []
    (dosync
       (when (can-undo?)
-         (slide-history! data-past user-data data-future)))
+         (slide-history! data-past *udata* data-future)))
    (reflect-history-state!))
 
 (defn redo!
@@ -251,7 +249,7 @@
    []
    (dosync
       (when (can-redo?)
-         (slide-history! data-future user-data data-past)))
+         (slide-history! data-future *udata* data-past)))
    (reflect-history-state!))
 
 ;-- Math --;
@@ -262,7 +260,7 @@
 (defn ^Path2D calc-path
    "Calculate a path based on the current control points."
    [] ;TODO accept polyline as arg?
-   (let [points (reverse (:pending-points @user-data))
+   (let [points (reverse (:pending-points @*udata*))
          ^Path2D path (Path2D$Double.)]
       (when (= (count points) 4)
          (let [[^Point2D p0
@@ -273,7 +271,7 @@
             (.curveTo path (.getX p1) (.getY p1)
                            (.getX p2) (.getY p2)
                            (.getX p3) (.getY p3))))
-      (.createTransformedShape ^AffineTransform (st :view :xform-to-view) path)))
+      (.createTransformedShape ^AffineTransform (view :xform-to-view) path)))
 
 (defn ^Point2D transform
    "Transform a location from one coordinate system to another."
@@ -285,12 +283,12 @@
 (defn ^Point2D loc-to-view
    "Transform a location from world to viewport coords."
    [& args]
-   (apply transform (st :view :xform-to-view) args))
+   (apply transform (view :xform-to-view) args))
 
 (defn ^Point2D loc-from-view
    "Transform a location from viewport to world coords."
    [& args]
-   (apply transform (st :view :xform-from-view) args))
+   (apply transform (view :xform-from-view) args))
 
 ;-- Rendering --;
 
@@ -303,13 +301,20 @@
          (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
 
 (defn draw-spline
-   "Draw the main user spline")
+   "Draw the main user spline"
+   [^Graphics2D g]
+   (comment "TODO"))
+
+(defn draw-pending
+   "Draw the curve in progress"
+   [^Graphics2D g]
+   (comment "TODO"))
 
 (defn render
    "Draw the world."
    [^Graphics2D g]
-   (let [[w h] (de-dim @viewport-dim)
-         [cx cy] (de-pt @view-center)]
+   (let [[w h] (de-dim (view :viewport-dim))
+         [cx cy] (de-pt (view :view-center))]
       (doto g
          (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
          (.setColor (Color. 50 50 50))
@@ -351,7 +356,7 @@
 
 ;TODO: Do event handlers need to use (binding *state*)?
 
-(defn ^JMenuItem new-mi-undo
+(def ^{:tag JMenuItem} mi-undo
    (doto (JMenuItem. "Undo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -361,7 +366,7 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
-(defn ^JMenuItem new-mi-redo
+(def ^{:tag JMenuItem} mi-redo
    (doto (JMenuItem. "Redo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -371,16 +376,14 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
-(defn ^{:doc "Menu bar for window."} new-menubar
-   
+(def ^{:doc "Menu bar for window." :tag JMenuBar} menu
    (doto (JMenuBar.)
       (.add (doto (JMenu. "Spline")
-               (.add (new-mi-undo))
-               (.add (new-mi-redo))))))
+               (.add mi-undo)
+               (.add mi-redo)))))
 
 (def ^{:doc "Control panel" :tag JPanel}
    controls
-   (let [])
    (doto (JPanel.)
       (.setMinimumSize (Dimension. 300 600))))
 
@@ -391,8 +394,9 @@
    (dosync
       (let [^Dimension dim (.getSize canvas)
             [dim-w dim-h] (de-dim dim)]
-         (ref-set view-center (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
-         (ref-set viewport-dim dim)
+         (assoc-in-ref! *view*
+            [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
+            [:viewport-dim] dim)
          (update-xform!))))
 
 (def ^{:doc "Drawing canvas" :tag JComponent}

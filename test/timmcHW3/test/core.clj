@@ -7,13 +7,13 @@
 (deftest complete-update
    (let [complex {:foo "bar" :qux [4 0]}
          altered {:foo "bar" :qux [4 7]}]
-      (is (= (up-in complex [:qux 1] + 3 4) altered))
-      (is (= (up-in complex [] identity) complex))))
+      (is (= (update-in0 complex [:qux 1] + 3 4) altered))
+      (is (= (update-in0 complex [] identity) complex))))
 
 (deftest replacing-update
    (let [complex {:foo "bar" :qux [4 0]}
          altered {:foo "bar" :qux [4 7]}]
-      (is (= (up-in complex [:qux 1] 7) altered))))
+      (is (= (assoc-in0 complex [:qux 1] 7) altered))))
 
 (deftest add-point
    (let [blank {:pending-points ()}
