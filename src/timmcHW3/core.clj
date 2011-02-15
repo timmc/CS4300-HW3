@@ -3,8 +3,8 @@
    (:import [javax.swing SwingUtilities UIManager
                          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton
                          KeyStroke]
-            [java.awt BorderLayout Graphics2D RenderingHints Dimension Color Component]
-            [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Rectangle2D$Double]
+            [java.awt BorderLayout Graphics2D RenderingHints Dimension Color BasicStroke Component]
+            [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
             [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
 
@@ -257,20 +257,15 @@
 ;TODO: add {set,nudge}-{rotation,zoom,translation-{x,y}}! functions
 ;TODO: add functions to apply transforms to collections of coords
 
-(defn ^Path2D calc-path
-   "Calculate a path based on the current control points."
-   [] ;TODO accept polyline as arg?
-   (let [points (reverse (:pending-points @*udata*))
-         ^Path2D path (Path2D$Double.)]
-      (when (= (count points) 4)
-         (let [[^Point2D p0
-                ^Point2D p1
-                ^Point2D p2
-                ^Point2D p3] points]
-            (.moveTo path (.getX p0) (.getY p0))
-            (.curveTo path (.getX p1) (.getY p1)
-                           (.getX p2) (.getY p2)
-                           (.getX p3) (.getY p3))))
+(defn ^Path2D view-cubic-curve
+   "Calculate the path based on the current control points."
+   [^Point2D p0, ^Point2D p1, ^Point2D p2, ^Point2D p3]
+   (let [^Path2D path (Path2D$Double.)]
+      (.moveTo path (.getX p0) (.getY p0))
+      (.curveTo path
+         (.getX p1) (.getY p1)
+         (.getX p2) (.getY p2)
+         (.getX p3) (.getY p3))
       (.createTransformedShape ^AffineTransform (view :xform-to-view) path)))
 
 (defn ^Point2D transform
@@ -300,16 +295,52 @@
          (.setPaint c)
          (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
 
+(def ^Color control-sement-color Color/YELLOW)
+(def ^BasicStroke control-segment-stroke
+   (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
+
+(defn draw-control-segments
+   "Draw segments of a control polygon."
+   [^Graphics2D g, points]
+   (loop [^Point2D prev (first points)
+          remain (next points)]
+      (when remain
+         (let [cur (first remain)]
+            (.setColor g Color/BLUE)
+            (.setStroke g control-segment-stroke)
+            (.draw g (Line2D$Double. (loc-to-view prev) (loc-to-view cur)))
+            (recur cur (next remain))))))
+
+(def ^Color control-point-color Color/GREEN)
+
+(defn draw-control-points
+   "Draw vertices of a control polygon."
+   [^Graphics2D g, points]
+   (doseq [p points]
+      (let [[vcx vcy] (de-pt (loc-to-view p))]
+         (.setColor g control-point-color)
+         (.fill g (Ellipse2D$Double. (- vcx 3) (- vcy 3) 6 6)))))
+
+(def ^Color curve-pending-color Color/RED)
+(def ^Color spline-color Color/RED)
+(def ^BasicStroke curve-stroke
+   (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
+    
 (defn draw-spline
    "Draw the main user spline"
    [^Graphics2D g]
    (comment "TODO"))
 
 (defn draw-pending
-   "Draw the curve in progress"
-   [^Graphics2D g]
-   (comment "TODO"))
-
+   "Draw a potentially incomplete curve."
+   [^Graphics2D g, points]
+   (draw-control-segments g points)
+   (draw-control-points g points)
+   (when (= (count points) 4)
+      (.setColor g curve-pending-color)
+      (.setStroke g curve-stroke)
+      (.draw g (apply view-cubic-curve points))))
+    
 (defn render
    "Draw the world."
    [^Graphics2D g]
@@ -321,14 +352,13 @@
          (.fill (Rectangle2D$Double. 0 0 w h))
          (.setColor Color/YELLOW)
          (.draw (Rectangle2D$Double. cx 0 0.1 h))
-         (.draw (Rectangle2D$Double. 0 cy w 0.1))
-         (.draw (calc-path))))
+         (.draw (Rectangle2D$Double. 0 cy w 0.1))))
    (test-draw-point g Color/WHITE 0 0) ; center
    (test-draw-point g Color/GREEN -50 0) ; left
    (test-draw-point g Color/RED 50 0) ; right
    (test-draw-point g Color/BLUE 0 50) ; up
    (draw-spline g)
-   (draw-pending g))
+   (draw-pending g (:pending-points @*udata*)))
 
 ;-- Event interpretation --;
 
