@@ -2,7 +2,7 @@
 SHELL:=/bin/bash
 
 build:
-	lein compile
+	lein compile | grep -v 'at clojure.lang.Compiler'
 
 test:
 	lein test
