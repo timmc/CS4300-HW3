@@ -8,17 +8,52 @@
             [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
     
+(declare *state*)
 
-(declare ^JComponent canvas
-         ^JMenuItem mi-undo
-         ^JMenuItem mi-redo)
+(defn st
+   "Get a piece of state."
+   [&ks]
+   (get-in @*state* ks))
 
-(defn complete-update-in
-   "A version of update-in that works with an empty sequence of keys."
+;-- Fixes --;
+
+(defn update-in0
+   "A version of update-in that works with an empty collection of keys."
    [m ks f & args]
    (if (seq ks)
       (apply update-in m ks f args)
       (apply f m args)))
+
+(defn assoc-in0
+   "A version of assoc-in that works with an empty collection of keys."
+   [m ks v]
+   (if (seq ks)
+      (assoc-in m ks v)
+      v))
+
+; Currently works just fine in Clojure, but is here for symmetry.
+(defn get-in0
+   "A version of get-in that works with an empty collection of keys."
+   [m ks]
+   (if (seq ks)
+      (get-in m ks)
+      m))
+
+;-- Utility --;
+
+(defmacro assoc-in-ref!
+   "Update an associative ref with pairs of key seqs and new values."
+   [ref-expr & kv-exprs]
+   (when-not (even? (count kv-exprs))
+      (throw (IllegalArgumentException. "assoc-in-ref! requires an even number of key-seq/value pairs.")))
+   (when (empty? kv-exprs)
+      (throw (IllegalArgumentException. "assoc-in-ref! requires at least one key-seq/value pair.")))
+   (let [pairs (partition 2 kv-exprs)
+         assocs (map #(list 'assoc-in0 (first %) (second %)) pairs)]
+      `(let [ref-val# ~ref-expr]
+          (dosync
+             (ref-set ref-val# (-> (deref ref-val#) ~@assocs))))))
+
 
 ;-- Conventions --;
 
@@ -39,50 +74,48 @@
 
 (def ^{:doc "Multiplier for incremental zoom in."}
    zoom-factor 1.1)
-
+    
 ;-- Viewpoint --;
 
-; Translation: User drags new world point to center of window.
-(def ^{:doc "Chosen center of rotation."}
-   rot-center
-   (ref [0 0]))
+(defrecord ^{:doc "Viewport state."}
+   Viewpoint
+   [^{:doc "Chosen center of rotation."}
+     rot-center ; Translation: User drags new world point to center of window.
+    ^{:doc "Minimum extent of world to show in both width and height."}
+     view-minspect ; Scale: Resizing the window stretches the view.
+    ^{:doc "Rotation of viewport."}
+     view-rot ; Rotation: Around the center of the window.
+    ^{:doc "Viewport's pixel center coordinates as [x y]."}
+     view-center ; Centering: This is the center of rotation of the viewpoint.
+    ^{:doc "World-to-viewport transform." :tag AffineTransform}
+     xform-to-view
+    ^{:doc "The inverse transform, viewport-to-world." :tag AffineTransform}
+     xform-from-view
+    ^{:doc "Dimensions of viewport." :tag Dimension}
+     viewport-dim
+   ])
 
-; Scale: Resizing the window stretches the view.
-(def ^{:doc "Minimum extent of world to show in both width and height."}
-   view-minspect
-   (ref 200))
-
-; Rotation: Around the center of the window.
-(def ^{:doc "Rotation of viewport."}
-   view-rot (ref 0))
-
-; Centering: This is the center of rotation of the viewpoint.
-(def ^{:doc "Viewport's pixel center coordinates as [x y]."}
-   view-center
-   (ref [0 0]))
-
-(def ^{:doc "World-to-viewport transform." :tag AffineTransform}
-   xform-to-view
-   (ref (AffineTransform.)))
-
-(def ^{:doc "The inverse transform, viewport-to-world." :tag AffineTransform}
-   xform-from-view
-   (ref (AffineTransform.)))
-
-(def ^{:doc "Dimensions of viewport." :tag Dimension}
-   viewport-dim
-   (ref (Dimension. 1 1)))
+(defn ^Viewpoint new-viewport
+   "Make an initial viewpoint."
+   []
+   (Viewpoint. [0 0]
+               200
+               0
+               [0 0]
+               (AffineTransform.)
+               (AffineTransform.)
+               (Dimension. 1 1)))
 
 (defn ^AffineTransform calc-xform
    "Calculate the world-to-viewport transformation."
    [view-w view-h]
    (dosync
-      (let [[drag-x drag-y] @rot-center
+      (let [[drag-x drag-y] (st :view :rot-center)
             minspect (min view-w view-h)
-            magnification (/ minspect @view-minspect)]
+            magnification (/ minspect (st :view :view-minspect))]
          (doto (AffineTransform.)
             (.translate (/ view-w 2) (/ view-h 2))
-            (.rotate (- @view-rot))
+            (.rotate (- (st :view :view-rot)))
             (.scale 1 -1) ; flip y coords
             (.scale magnification magnification) ; zoom
             (.translate (- drag-x) (- drag-y))))))
@@ -91,23 +124,55 @@
    "Update the world-to-viewpoint and inverse transformations."
    []
    (dosync
-      (let [[w h] (de-dim @viewport-dim)
+      (let [[w h] (de-dim (st :view :viewport-dim))
             at (calc-xform w h)]
-          (ref-set xform-to-view at)
-          (ref-set xform-from-view (.createInverse at)))))
+          (assoc-in-ref! *state*
+             [:view :xform-to-view] at
+             [:view :xform-from-view] (.createInverse at)))))
+
+;-- State --;
+
+(defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
+   UserData
+   [act ; The act that produced this state, e.g. "vertex drag"
+    curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
+    pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
+   ])
+
+(defn ^UserData new-userdata
+   "Make default userdata."
+   []
+   (UserData. "Initialization" [] []))
+    
+;;; Modes:
+; :initializing
+; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
+; :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
+; :manipulate - Allow dragging of vertices.
+; :pose - Viewport may be respositioned.
+
+;;; Other properties:
+; :is-dragging
+; :selection
+
+(defrecord ^{:doc "Whole-program state."}
+   ProgState
+   [mode ; overall mode
+    view ; viewpoint
+    udata ; user data
+    data-past ; Undo buffer
+    data-future ; Redo buffer
+   ])
+
+(defn ^ProgState new-progstate
+   "Create default program state."
+   []
+   (ProgState. :initialization (new-viewport) (new-userdata) () ()))
+
+(def ^{:doc "Global pointer to current state."} *state*
+   (ref (make-progstate)))
 
 ;-- Data --;
-
-(def ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
-   user-data
-   (ref
-      {:act ; The act that produced this state, e.g. "vertex drag"
-        "Initialization"
-       :curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
-        ()
-       :pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
-        ()
-      }))
 
 (defn ^{:statekeys [] :actname "add vertex"}
    add-pending-point
@@ -122,21 +187,15 @@
 
 ;-- History --;
 
-(def ^{:doc "Undo buffer."}
-   data-past (ref ()))
-
-(def ^{:doc "Redo buffer."}
-   data-future (ref ()))
-
 (defn can-undo?
    "Return true if there is undo history."
    []
-   (not (empty? @data-past)))
+   (not (empty? (:data-past @*state*))))
 
 (defn can-redo?
    "Return true if there is redo history."
    []
-   (not (empty? @data-future)))
+   (not (empty? (:data-future @*state*))))
 
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
@@ -161,12 +220,12 @@
    "Call f with current user-data state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :statekey and :actname metadata found on f."
    [f overrides & args]
    (dosync
-      (let [cur-state @user-data
+      (let [cur-state (:udata @*state*)
             fkeys (select-keys (meta f) [:actname])
             metadata (merge fkeys overrides)
-            next-state (apply complete-update-in cur-state (:statekeys (meta f)) f args)
+            next-state (apply up-in0 cur-state (:statekeys (meta f)) f args)
             next-state (assoc next-state :act (:actname metadata))]
-         (ref-set data-past (conj @data-past cur-state))
+         (ref-set data-past (conj (:data-past @*state*) cur-state))
          (ref-set data-future ()) ; destroy the future
          (ref-set user-data next-state)))
    (reflect-history-state!))
@@ -214,21 +273,24 @@
             (.curveTo path (.getX p1) (.getY p1)
                            (.getX p2) (.getY p2)
                            (.getX p3) (.getY p3))))
-      (.createTransformedShape ^AffineTransform @xform-to-view path)))
+      (.createTransformedShape ^AffineTransform (st :view :xform-to-view) path)))
+
+(defn ^Point2D transform
+   "Transform a location from one coordinate system to another."
+   ([^AffineTransform at, sx, sy]
+    (.transform at (Point2D$Double. sx sy) nil))
+   ([^AffineTransform at, ^Point2D p]
+    (.transform at p nil)))
 
 (defn ^Point2D loc-to-view
    "Transform a location from world to viewport coords."
-   ([wx wy]
-    (.transform ^AffineTransform @xform-to-view (Point2D$Double. wx wy) nil))
-   ([^Point2D p]
-    (.transform ^AffineTransform @xform-to-view p nil)))
+   [& args]
+   (apply transform (st :view :xform-to-view) args))
 
 (defn ^Point2D loc-from-view
    "Transform a location from viewport to world coords."
-   ([vx vy]
-    (.transform ^AffineTransform @xform-from-view (Point2D$Double. vx vy) nil))
-   ([^Point2D p]
-    (.transform ^AffineTransform @xform-from-view p nil)))
+   [& args]
+   (apply transform (st :view :xform-from-view) args))
 
 ;-- Rendering --;
 
@@ -239,6 +301,9 @@
       (doto g
          (.setPaint c)
          (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
+
+(defn draw-spline
+   "Draw the main user spline")
 
 (defn render
    "Draw the world."
@@ -256,7 +321,9 @@
    (test-draw-point g Color/WHITE 0 0) ; center
    (test-draw-point g Color/GREEN -50 0) ; left
    (test-draw-point g Color/RED 50 0) ; right
-   (test-draw-point g Color/BLUE 0 50)) ; up
+   (test-draw-point g Color/BLUE 0 50) ; up
+   (draw-spline g)
+   (draw-pending g))
 
 ;-- Event interpretation --;
 
@@ -282,7 +349,9 @@
 
 ;-- Components --;
 
-(def ^JMenuItem mi-undo
+;TODO: Do event handlers need to use (binding *state*)?
+
+(defn ^JMenuItem new-mi-undo
    (doto (JMenuItem. "Undo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -292,7 +361,7 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
-(def ^JMenuItem mi-redo
+(defn ^JMenuItem new-mi-redo
    (doto (JMenuItem. "Redo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -302,15 +371,16 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
-(def ^{:doc "Menu bar for window."}
-   menu
+(defn ^{:doc "Menu bar for window."} new-menubar
+   
    (doto (JMenuBar.)
       (.add (doto (JMenu. "Spline")
-               (.add mi-undo)
-               (.add mi-redo)))))
-    
+               (.add (new-mi-undo))
+               (.add (new-mi-redo))))))
+
 (def ^{:doc "Control panel" :tag JPanel}
    controls
+   (let [])
    (doto (JPanel.)
       (.setMinimumSize (Dimension. 300 600))))
 
