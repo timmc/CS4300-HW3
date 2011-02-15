@@ -10,7 +10,8 @@
 
 ;-- Globals --;
 
-(declare ^JComponent canvas
+(declare ^JFrame frame
+         ^JComponent canvas
          ^JMenuItem mi-undo
          ^JMenuItem mi-redo)
 
@@ -158,9 +159,9 @@
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
    UserData
-   [act ; The act that produced this state, e.g. "vertex drag"
-    curves ; List of cubic Bézier curves, each of which is a list of 4 Point2Ds.
-    pending-points ; Point2Ds (in latest-first order) that have not been incorporated into a curve yet.
+   [act ; The act that produced this state, e.g. "vertex drag" or empty string.
+    curves ; Vector of cubic Bézier curves, each of which is a list of 4+ Point2Ds.
+    pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
    ])
 
 (def ^{:doc "User data that needs undo/redo."} *udata*
@@ -170,11 +171,7 @@
    add-pending-point
    "Add a pending point to the world."
    [^UserData udata, ^Point2D wp]
-   (let [old-pending (:pending-points udata)
-         new-pend (conj (if (= (count old-pending) 4)
-                          () ; clear it out if too many
-                          old-pending)
-                     wp)]
+   (let [new-pend (conj (:pending-points udata) wp)]
       (assoc udata :pending-points new-pend)))
 
 ;-- History --;
@@ -220,7 +217,7 @@
    (dosync
       (let [cur-state @*udata*
             fkeys (select-keys (meta f) [:actname])
-            metadata (merge fkeys overrides)
+            metadata (merge {:udata-sel [] :actname ""} fkeys overrides) ; defaults, function-specified, overrides
             next-state (apply update-in0 cur-state (:udata-sel (meta f)) f args)
             next-state (assoc next-state :act (:actname metadata))]
          (ref-set data-past (conj @data-past cur-state))
@@ -251,6 +248,11 @@
       (when (can-redo?)
          (slide-history! data-future *udata* data-past)))
    (reflect-history-state!))
+
+(defn maybe-exit
+   "Exit, or possible ask user to save data first."
+   []
+   (.dispose frame))
 
 ;-- Math --;
 
@@ -406,11 +408,20 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
+(def ^{:tag JMenuItem} mi-exit
+   (doto (JMenuItem. "Exit")
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (maybe-exit))))
+      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
+
 (def ^{:doc "Menu bar for window." :tag JMenuBar} menu
    (doto (JMenuBar.)
       (.add (doto (JMenu. "Spline")
                (.add mi-undo)
-               (.add mi-redo)))))
+               (.add mi-redo)
+               (.add mi-exit)))))
 
 (def ^{:doc "Control panel" :tag JPanel}
    controls
@@ -449,21 +460,24 @@
          (proxy [ComponentAdapter] []
             (componentResized [_] (update-canvas-depends!))))))
 
+(def ^{:doc "Application window." :tag JFrame}
+   frame
+   (doto (JFrame.)
+      (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
+      (.setJMenuBar menu)
+      (.setLayout (BorderLayout. 0 0))
+      (.add controls BorderLayout/LINE_START)
+      (.add canvas BorderLayout/CENTER)
+      (.pack)))
+    
 ;-- Setup --;
 
 (defn launch
    "Create and display the GUI."
    []
    (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
-   (let [frame (doto (JFrame.)
-                  (.setDefaultCloseOperation JFrame/EXIT_ON_CLOSE)
-                  (.setJMenuBar menu)
-                  (.setLayout (BorderLayout. 0 0))
-                  (.add controls BorderLayout/LINE_START)
-                  (.add canvas BorderLayout/CENTER)
-                  (.pack))]
-      (update-canvas-depends!)
-      (.setVisible frame true)))
+   (update-canvas-depends!)
+   (.setVisible frame true))
 
 (defn -main
    "Main sequence" ;FIXME
