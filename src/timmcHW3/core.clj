@@ -1,32 +1,38 @@
 (ns timmcHW3.core
    "Core code. Use -main."
-   (:import [javax.swing SwingUtilities UIManager
-                         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JButton
-                         KeyStroke]
-            [java.awt BorderLayout Graphics2D RenderingHints Dimension Color BasicStroke Component]
-            [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
-            [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
-   (:gen-class))
+   (:import
+      [javax.swing SwingUtilities UIManager
+         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton
+         KeyStroke]
+      [java.awt BorderLayout Dimension Component
+         Graphics2D RenderingHints Color BasicStroke]
+      [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
+         Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
+      [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
+    (:gen-class))
 
 (defrecord ^{:doc "GUI components."}
    GUI
    [^{:doc "Application window." :tag JFrame}
-      frame
-      ^{:doc "Toolbox buttons." :tag JPanel}
-      controls
-      ^{:doc "Drawing canvas." :tag JComponent}
-      canvas
-      ^{:doc "Application menubar." :tag JMenuBar}
-      menu
-      ^{:doc "Undo menu item." :tag JMenuItem}
-      mi-undo
-      ^{:doc "Redo menu item." :tag JMenuItem}
-      mi-redo
-      ])
-    
-(def ^{:doc "The viewpoint's state."}
-   gui
-   (ref (GUI. nil nil nil nil nil nil)))
+     frame
+    ^{:doc "Toolbox buttons." :tag JPanel}
+     controls
+    ^{:doc "Drawing canvas." :tag JComponent}
+     canvas
+    ^{:doc "Application menubar." :tag JMenuBar}
+     menu
+    ^{:doc "Undo menu item." :tag JMenuItem}
+     mi-undo
+    ^{:doc "Redo menu item." :tag JMenuItem}
+     mi-redo
+    ^{:doc "Pose mode toggle button." :tag JCheckBoxMenuItem}
+     mi-pose
+    ])
+
+(def ^{:doc "The viewpoint's state."} gui (ref nil))
+
+(defn init-gui []
+   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil))))
     
 ;-- Fixes --;
 
@@ -54,18 +60,16 @@
 
 ;-- Utility --;
 
-(defmacro assoc-in-ref!
-   "Update an associative ref with pairs of key seqs and new values."
-   [ref-expr & kv-exprs]
-   (when-not (even? (count kv-exprs))
-      (throw (IllegalArgumentException. "assoc-in-ref! requires an even number of key-seq/value pairs.")))
-   (when (empty? kv-exprs)
-      (throw (IllegalArgumentException. "assoc-in-ref! requires at least one key-seq/value pair.")))
-   (let [pairs (partition 2 kv-exprs)
-         assocs (map #(list 'assoc-in0 (first %) (second %)) pairs)]
-      `(let [ref-val# ~ref-expr]
-          (dosync
-             (ref-set ref-val# (-> (deref ref-val#) ~@assocs))))))
+(defn assoc-in-ref!
+   "Update an associative ref with a new value given a key vector. Evals to true if changed, false otherwise."
+   [aref ks v]
+   (let [old-val (get-in0 @aref ks)]
+      (if (= v old-val)
+         false
+         (dosync
+            (ref-set aref (assoc-in0 @aref ks v))
+            true))))
+
 
 ; This is done as a macro in order to preserve type hinting.
 (defmacro create!
@@ -109,7 +113,7 @@
      view-minspect ; Scale: Resizing the window stretches the view.
     ^{:doc "Rotation of viewport."}
      view-rot ; Rotation: Around the center of the window.
-    ^{:doc "Viewport's pixel center coordinates as [x y]."}
+    ^{:doc "Viewport's pixel center coordinates as Point2D."}
      view-center ; Centering: This is the center of rotation of the viewpoint.
     ^{:doc "World-to-viewport transform." :tag AffineTransform}
      xform-to-view
@@ -119,15 +123,7 @@
      viewport-dim
    ])
 
-(def ^{:doc "The viewpoint's state."}
-   view
-   (ref (Viewpoint. [0 0]
-                    200
-                    0
-                    [0 0]
-                    (AffineTransform.)
-                    (AffineTransform.)
-                    (Dimension. 1 1))))
+(def ^{:doc "The viewpoint's state."} view (ref nil))
 
 (defn ^AffineTransform calc-xform
    "Calculate the world-to-viewport transformation."
@@ -149,30 +145,41 @@
    (dosync
       (let [[w h] (de-dim (.viewport-dim @view))
             at (calc-xform w h)]
-          (assoc-in-ref! view
-             [:xform-to-view] at
-             [:xform-from-view] (.createInverse at)))))
+          (assoc-in-ref! view [:xform-to-view] at)
+          (assoc-in-ref! view [:xform-from-view] (.createInverse at)))))
+
+(defn update-canvas-depends!
+   "Update variables that depend on the canvas size or other state."
+   []
+   (dosync
+      (let [dim (.getSize (.canvas @gui))
+              [dim-w dim-h] (de-dim dim)]
+         (assoc-in-ref! view [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
+         (assoc-in-ref! view [:viewport-dim] dim)))
+   (update-xform!))
+    
+(defn init-view []
+   (dosync (ref-set view (Viewpoint. [0 0] 200 0 nil nil nil nil)))
+   (update-canvas-depends!))
 
 ;-- State --;
 
 ;;; Modes:
-; :initializing
 ; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
 ; :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
 ; :manipulate - Allow dragging of vertices.
-; :pose - Viewport may be respositioned.
-
-;;; Other properties:
-; :is-dragging
-; :selection
 
 (defrecord ^{:doc "Whole-program state."}
    ProgState
-   [mode ; overall mode
+   [mode ; overall mode, explained above
+    posing? ; true if in the Pose minor mode
+    dragging? ; true if something is being dragged
    ])
 
-(def ^{:doc "Global pointer to current state."} state
-   (ref (ProgState. :initialization)))
+(def ^{:doc "Global pointer to current state."} state (ref nil))
+
+(defn init-state []
+   (dosync (ref-set state (ProgState. :extend0 false false))))
 
 ;-- Data --;
 
@@ -181,17 +188,19 @@
    [act ; The act that produced this state, e.g. "vertex drag" or empty string.
     curves ; Vector of cubic Bézier curves, each of which is a list of 4+ Point2Ds.
     pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
+    saved-view ; Viewpoint that was active when this state was *first* saved off.
+    saved-mode ; ProgState.mode that was active when this state was *first* saved off.
    ])
 
-(def ^{:doc "User data that needs undo/redo."} udata
-   (ref (UserData. "Initialization" [] [])))
+(def ^{:doc "User data that needs undo/redo."} udata (ref nil))
 
-(defn ^{:udata-sel [] :actname "add vertex"}
-   add-pending-point
-   "Add a pending point to the world."
-   [^UserData u, ^Point2D wp]
-   (let [new-pend (conj (:pending-points u) wp)]
-      (assoc u :pending-points new-pend)))
+(defn init-udata []
+   (dosync (ref-set udata (UserData. "Initialization" [] [] @view (.mode @state)))))
+
+(def add-pending-point ^{:actname "add vertex" :doc "Add a pending point to the world."}
+   (fn [^Point2D wp]
+       (let [new-pend (conj (:pending-points @udata) wp)]
+          (assoc-in-ref! udata [:pending-points] new-pend))))
 
 ;-- History --;
 
@@ -201,58 +210,42 @@
 (def ^{:doc "Redo buffer."}
    data-future (ref ()))
 
-(defn can-undo?
-   "Return true if there is undo history."
-   []
-   (not (empty? @data-past)))
-
-(defn can-redo?
-   "Return true if there is redo history."
-   []
-   (not (empty? @data-future )))
+(defn has-history?
+   "Return true if there is history in this ref."
+   [r]
+   (seq @r))
 
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
    []
    (let [^JMenuItem mi-undo (.mi-undo @gui)
          ^JMenuItem mi-redo (.mi-redo @gui)]
-      (if (can-undo?)
+      (if (has-history? data-past)
          (doto mi-undo
             (.setEnabled true)
             (.setText (str "Undo " (.act @udata))))
          (doto mi-undo
             (.setEnabled false)
             (.setText "Nothing to undo")))
-      (if (can-redo?)
+      (if (has-history? data-future)
          (doto mi-redo
             (.setEnabled true)
             (.setText (str "Redo " (.act (first @data-future)))))
          (doto mi-redo
             (.setEnabled false)
             (.setText "Nothing to redo")))))
-   
-; TODO define helper arity to take a keyword for just acting on that element
-(defn act!
-   "Call f with current *udata* state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :udata-sel and :actname metadata found on f."
-   [f overrides & args]
-   (dosync
-      (let [cur-state @udata
-            fkeys (select-keys (meta f) [:actname])
-            metadata (merge {:udata-sel [] :actname ""} fkeys overrides);FIXME strings not showing properly on undo ; defaults, function-specified, overrides
-            next-state (apply update-in0 cur-state (:udata-sel (meta f)) f args)
-            next-state (assoc next-state :act (:actname metadata))]
-         (ref-set data-past (conj @data-past cur-state))
-         (ref-set data-future ()) ; destroy the future
-         (ref-set udata next-state)))
-   (reflect-history-state!))
 
-(defn slide-history!
-   "Push current state onto 'to' and pop 'from' as new state."
-   [from state to]
+(defn act!
+   "Call ref-updating f (no other side effects) with arguments. Uses :actname metadata found on f to add to undo buffer."
+   [f & args]
    (dosync
-      (ref-set to (conj @to @state))
-      (ref-set udata (first @from))
-      (ref-set from (rest @from))))
+      (let [old-state (assoc (assoc @udata :saved-view @view) :saved-mode (.mode @state))]
+         (apply f args) ; change @udata
+         (let [new-state (assoc @udata :act (:actname (meta f)))]
+            (ref-set data-past (conj @data-past old-state))
+            (ref-set data-future ()) ; destroy the future
+            (ref-set udata new-state)))
+   (reflect-history-state!)))
 
 ;-- Math --;
 
@@ -366,53 +359,62 @@
 ; GUI ;
 ;=====;
 
-;-- Event handlers --;
-
-(defn undo!
-   "Undo to previous state, if possible. Does not trigger redraw."
-   []
-   (dosync
-      (when (can-undo?)
-         (slide-history! data-past udata data-future)))
-   (reflect-history-state!))
-    
-(defn redo!
-   "Redo to subsequent state, if possible. Does not trigger redraw."
-   []
-   (dosync
-      (when (can-redo?)
-         (slide-history! data-future udata data-past)))
-   (reflect-history-state!))
-    
-(defn maybe-exit
-   "Exit, or possible ask user to save data first."
-   []
-   (.dispose (.frame @gui)))
-
-(defn update-canvas-depends!
-   "Update variables that depend on the canvas size or other state."
-   []
-   (dosync
-      (let [dim (.getSize (.canvas @gui))
-            [dim-w dim-h] (de-dim dim)]
-         (assoc-in-ref! view
-            [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
-            [:viewport-dim] dim)
-         (update-xform!))))
-    
-;-- Event interpretation --;
-
 (defn ask-redraw
    "Ask for the canvas to be redrawn."
    []
    (.repaint (.canvas @gui)))
 
+(defn update-mode!
+   "Update mode-dependent GUI elements."
+   []
+   false ;TODO
+   )
+
+;-- Event handlers --;
+
+(defn slide-history!
+   "Slide history for undo/redo."
+   [from to]
+   (dosync
+      (ref-set to (conj @to @udata))
+      (ref-set udata (first @from))
+      (ref-set from (rest @from))))
+   
+(defn do-history!
+   [undo?]
+   (let [from (if undo? data-past data-future)
+         to (if undo? data-future data-past)]
+      (dosync
+         (when (has-history? from)
+            (slide-history! from to)
+            (assoc-in-ref! view [] (.saved-view @udata))
+            (assoc-in-ref! state [:mode] (.saved-mode @udata))))
+      (ask-redraw)
+      (reflect-history-state!)
+      (update-mode!)))
+
+(defn do-maybe-exit
+   "Exit, or possible ask user to save data first."
+   []
+   (.dispose (.frame @gui)))
+
+(defn do-mode-position
+   "Update state.posing? if allowed."
+   []
+   (assoc-in-ref! state [:posing?] (.getState (.mi-pose @gui))))
+
+;-- Event interpretation --;
+
 (defn canvas-click
    "A click event has occurred on the canvas."
-   [^MouseEvent e]   
-   (act! add-pending-point {} (loc-from-view (.getX e) (.getY e))) ;TODO restrict to acting only during drawing mode
-   (ask-redraw)
-   )
+   [^MouseEvent e]
+   (dosync
+      (when-not (or (.posing? @state)
+                    (.dragging? @state)
+                    (= (.mode @state) :manipulate))
+         (act! add-pending-point (loc-from-view (.getX e) (.getY e)))
+         (update-mode!)
+         (ask-redraw))))
 
 (defn canvas-drag
    [^MouseMoveEvent e]
@@ -432,8 +434,7 @@
       (.addActionListener
          (proxy [ActionListener] []
             (actionPerformed [_]
-               (undo!)
-               (ask-redraw))))
+               (do-history! true))))
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
@@ -443,8 +444,7 @@
       (.addActionListener
          (proxy [ActionListener] []
             (actionPerformed [_]
-               (redo!)
-               (ask-redraw))))
+               (do-history! false))))
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
@@ -454,8 +454,16 @@
       (.addActionListener
          (proxy [ActionListener] []
             (actionPerformed [_]
-               (maybe-exit))))
+               (do-maybe-exit))))
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
+
+(defn ^JCheckBoxMenuItem new-mi-pose
+   []
+   (doto (JCheckBoxMenuItem. "Position" (.posing? @state))
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (do-mode-position))))))
 
 (defn ^JMenuBar new-menu
    "Make a menu bar."
@@ -464,7 +472,9 @@
       (.add (doto (JMenu. "Spline")
                (.add (create! gui [:mi-undo] new-mi-undo))
                (.add (create! gui [:mi-redo] new-mi-redo))
-               (.add (new-mi-exit))))))
+               (.add (new-mi-exit))))
+      (.add (doto (JMenu. "Mode")
+               (.add (create! gui [:mi-pose] new-mi-pose))))))
 
 (defn ^JPanel new-controls
    "Make a control panel."
@@ -491,7 +501,9 @@
             (mouseWheelMoved [e] (canvas-scroll e))))
       (.addComponentListener
          (proxy [ComponentAdapter] []
-            (componentResized [_] (update-canvas-depends!))))))
+            (componentResized [_]
+               (update-canvas-depends!)
+               (ask-redraw))))))
 
 (defn ^JFrame new-frame
    "Make the application window."
@@ -509,8 +521,12 @@
 (defn launch
    "Create and display the GUI."
    []
+   (init-state)
+   (init-gui)
    (let [frame (create! gui [:frame] new-frame)]
       (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
+      (init-view)
+      (init-udata)
       (update-canvas-depends!)
       (.setVisible frame true)))
 
