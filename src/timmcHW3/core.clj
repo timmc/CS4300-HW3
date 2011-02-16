@@ -120,7 +120,7 @@
    ])
 
 (def ^{:doc "The viewpoint's state."}
-   *view*
+   view
    (ref (Viewpoint. [0 0]
                     200
                     0
@@ -129,21 +129,16 @@
                     (AffineTransform.)
                     (Dimension. 1 1))))
 
-(defn view
-   "Accessor for *view*"
-   [& ks]
-   (get-in @*view* ks))
-
 (defn ^AffineTransform calc-xform
    "Calculate the world-to-viewport transformation."
    [view-w view-h]
    (dosync
-      (let [[drag-x drag-y] (view :rot-center)
+      (let [[drag-x drag-y] (.rot-center @view)
             minspect (min view-w view-h)
-            magnification (/ minspect (view :view-minspect))]
+            magnification (/ minspect (.view-minspect @view))]
          (doto (AffineTransform.)
             (.translate (/ view-w 2) (/ view-h 2))
-            (.rotate (- (view :view-rot)))
+            (.rotate (- (.view-rot @view)))
             (.scale 1 -1) ; flip y coords
             (.scale magnification magnification) ; zoom
             (.translate (- drag-x) (- drag-y))))))
@@ -152,9 +147,9 @@
    "Update the world-to-viewpoint and inverse transformations."
    []
    (dosync
-      (let [[w h] (de-dim (view :viewport-dim))
+      (let [[w h] (de-dim (.viewport-dim @view))
             at (calc-xform w h)]
-          (assoc-in-ref! *view*
+          (assoc-in-ref! view
              [:xform-to-view] at
              [:xform-from-view] (.createInverse at)))))
 
@@ -188,15 +183,15 @@
     pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
    ])
 
-(def ^{:doc "User data that needs undo/redo."} *udata*
+(def ^{:doc "User data that needs undo/redo."} udata
    (ref (UserData. "Initialization" [] [])))
 
 (defn ^{:udata-sel [] :actname "add vertex"}
    add-pending-point
    "Add a pending point to the world."
-   [^UserData udata, ^Point2D wp]
-   (let [new-pend (conj (:pending-points udata) wp)]
-      (assoc udata :pending-points new-pend)))
+   [^UserData u, ^Point2D wp]
+   (let [new-pend (conj (:pending-points u) wp)]
+      (assoc u :pending-points new-pend)))
 
 ;-- History --;
 
@@ -224,14 +219,14 @@
       (if (can-undo?)
          (doto mi-undo
             (.setEnabled true)
-            (.setText (str "Undo " (:act @*udata*))))
+            (.setText (str "Undo " (.act @udata))))
          (doto mi-undo
             (.setEnabled false)
             (.setText "Nothing to undo")))
       (if (can-redo?)
          (doto mi-redo
             (.setEnabled true)
-            (.setText (str "Redo " (:act (first @data-future)))))
+            (.setText (str "Redo " (.act (first @data-future)))))
          (doto mi-redo
             (.setEnabled false)
             (.setText "Nothing to redo")))))
@@ -241,14 +236,14 @@
    "Call f with current *udata* state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :udata-sel and :actname metadata found on f."
    [f overrides & args]
    (dosync
-      (let [cur-state @*udata*
+      (let [cur-state @udata
             fkeys (select-keys (meta f) [:actname])
             metadata (merge {:udata-sel [] :actname ""} fkeys overrides);FIXME strings not showing properly on undo ; defaults, function-specified, overrides
             next-state (apply update-in0 cur-state (:udata-sel (meta f)) f args)
             next-state (assoc next-state :act (:actname metadata))]
          (ref-set data-past (conj @data-past cur-state))
          (ref-set data-future ()) ; destroy the future
-         (ref-set *udata* next-state)))
+         (ref-set udata next-state)))
    (reflect-history-state!))
 
 (defn slide-history!
@@ -256,7 +251,7 @@
    [from state to]
    (dosync
       (ref-set to (conj @to @state))
-      (ref-set *udata* (first @from))
+      (ref-set udata (first @from))
       (ref-set from (rest @from))))
 
 ;-- Math --;
@@ -273,7 +268,7 @@
          (.getX p1) (.getY p1)
          (.getX p2) (.getY p2)
          (.getX p3) (.getY p3))
-      (.createTransformedShape ^AffineTransform (view :xform-to-view) path)))
+      (.createTransformedShape ^AffineTransform (.xform-to-view @view) path)))
 
 (defn ^Point2D transform
    "Transform a location from one coordinate system to another."
@@ -285,12 +280,12 @@
 (defn ^Point2D loc-to-view
    "Transform a location from world to viewport coords."
    [& args]
-   (apply transform (view :xform-to-view) args))
+   (apply transform (.xform-to-view @view) args))
 
 (defn ^Point2D loc-from-view
    "Transform a location from viewport to world coords."
    [& args]
-   (apply transform (view :xform-from-view) args))
+   (apply transform (.xform-from-view @view) args))
 
 ;-- Rendering --;
 
@@ -351,8 +346,8 @@
 (defn render
    "Draw the world."
    [^Graphics2D g]
-   (let [[w h] (de-dim (view :viewport-dim))
-         [cx cy] (de-pt (view :view-center))]
+   (let [[w h] (de-dim (.viewport-dim @view))
+         [cx cy] (de-pt (.view-center @view))]
       (doto g
          (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
          (.setColor (Color. 50 50 50))
@@ -365,7 +360,7 @@
    (test-draw-point g Color/RED 50 0) ; right
    (test-draw-point g Color/BLUE 0 50) ; up
    (draw-spline g)
-   (draw-pending g (:pending-points @*udata*)))
+   (draw-pending g (.pending-points @udata)))
 
 ;=====;
 ; GUI ;
@@ -378,7 +373,7 @@
    []
    (dosync
       (when (can-undo?)
-         (slide-history! data-past *udata* data-future)))
+         (slide-history! data-past udata data-future)))
    (reflect-history-state!))
     
 (defn redo!
@@ -386,7 +381,7 @@
    []
    (dosync
       (when (can-redo?)
-         (slide-history! data-future *udata* data-past)))
+         (slide-history! data-future udata data-past)))
    (reflect-history-state!))
     
 (defn maybe-exit
@@ -400,7 +395,7 @@
    (dosync
       (let [dim (.getSize (.canvas @gui))
             [dim-w dim-h] (de-dim dim)]
-         (assoc-in-ref! *view*
+         (assoc-in-ref! view
             [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
             [:viewport-dim] dim)
          (update-xform!))))
