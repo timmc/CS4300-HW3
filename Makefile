@@ -2,10 +2,10 @@
 SHELL:=/bin/bash
 
 build:
-	lein compile | grep -v 'at clojure.lang.Compiler'
+	lein compile | grep -v 'at clojure.'
 
 test:
-	lein test
+	lein test | grep -v 'at clojure.'
 
 run:
 	lein run $(n)
