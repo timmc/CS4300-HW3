@@ -389,6 +389,7 @@
             (slide-history! from to)
             (assoc-in-ref! view [] (.saved-view @udata))
             (assoc-in-ref! state [:mode] (.saved-mode @udata))))
+      (update-canvas-depends!) ; canvas may have changed shape
       (ask-redraw)
       (reflect-history-state!)
       (update-mode!)))
