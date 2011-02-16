@@ -219,8 +219,8 @@
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
    []
-   (let [^JMenuItem mi-undo (.mi-undo ^GUI @gui)
-         ^JMenuItem mi-redo (.mi-redo ^GUI @gui)]
+   (let [^JMenuItem mi-undo (.mi-undo @gui)
+         ^JMenuItem mi-redo (.mi-redo @gui)]
       (if (can-undo?)
          (doto mi-undo
             (.setEnabled true)
@@ -392,13 +392,13 @@
 (defn maybe-exit
    "Exit, or possible ask user to save data first."
    []
-   (.dispose ^JFrame (.frame ^GUI @gui)))
+   (.dispose (.frame @gui)))
 
 (defn update-canvas-depends!
    "Update variables that depend on the canvas size or other state."
    []
    (dosync
-      (let [dim (.getSize ^JComponent (.canvas ^GUI @gui))
+      (let [dim (.getSize (.canvas @gui))
             [dim-w dim-h] (de-dim dim)]
          (assoc-in-ref! *view*
             [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
@@ -410,7 +410,7 @@
 (defn ask-redraw
    "Ask for the canvas to be redrawn."
    []
-   (.repaint ^JComponent (.canvas ^GUI @gui)))
+   (.repaint (.canvas @gui)))
 
 (defn canvas-click
    "A click event has occurred on the canvas."
