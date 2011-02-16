@@ -8,7 +8,7 @@ test:
 	lein test | grep -v 'at clojure.'
 
 run:
-	lein run $(n)
+	lein run
 
 todo:
 	grep 'TODO' -R */ || true

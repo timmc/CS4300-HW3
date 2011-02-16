@@ -1,10 +1,11 @@
 (ns timmcHW3.core
    "Core code. Use -main."
    (:import
-      [javax.swing SwingUtilities UIManager
-         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton
+      [javax.swing SwingUtilities UIManager BoxLayout
+         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton JSpinner SpinnerNumberModel JSpinner$NumberEditor
          KeyStroke]
-      [java.awt BorderLayout Dimension Component
+      [javax.swing.event ChangeListener]
+      [java.awt Dimension Component
          Graphics2D RenderingHints Color BasicStroke]
       [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
          Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
@@ -27,12 +28,14 @@
      mi-redo
     ^{:doc "Pose mode toggle button." :tag JCheckBoxMenuItem}
      mi-pose
+    ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
+     spinner-rot
     ])
 
 (def ^{:doc "The viewpoint's state."} gui (ref nil))
 
 (defn init-gui []
-   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil))))
+   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil))))
     
 ;-- Fixes --;
 
@@ -123,6 +126,10 @@
      viewport-dim
    ])
 
+(def default-rot-center [0 0])
+(def default-view-minspect 200)
+(def default-view-rot 0.0)
+
 (def ^{:doc "The viewpoint's state."} view (ref nil))
 
 (defn ^AffineTransform calc-xform
@@ -157,10 +164,26 @@
          (assoc-in-ref! view [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
          (assoc-in-ref! view [:viewport-dim] dim)))
    (update-xform!))
-    
-(defn init-view []
-   (dosync (ref-set view (Viewpoint. [0 0] 200 0 nil nil nil nil)))
-   (update-canvas-depends!))
+
+(defn update-pose!
+   "Update view based on current state of Pose spinners."
+   []
+   (dosync
+      (let [rot (double (.getValue (.spinner-rot @gui)))]
+         (assoc-in-ref! view [:view-rot] rot))
+      (update-xform!)))
+
+(defn init-view
+   "Initialize the global view ref."
+   []
+   (let [rot ()]
+      (dosync
+         (ref-set view
+            (Viewpoint. default-rot-center
+                        default-view-minspect
+                        default-view-rot
+                        nil nil nil nil)))
+      (update-canvas-depends!)))
 
 ;-- State --;
 
@@ -188,14 +211,13 @@
    [act ; The act that produced this state, e.g. "vertex drag" or empty string.
     curves ; Vector of cubic Bézier curves, each of which is a list of 4+ Point2Ds.
     pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
-    saved-view ; Viewpoint that was active when this state was *first* saved off.
     saved-mode ; ProgState.mode that was active when this state was *first* saved off.
    ])
 
 (def ^{:doc "User data that needs undo/redo."} udata (ref nil))
 
 (defn init-udata []
-   (dosync (ref-set udata (UserData. "Initialization" [] [] @view (.mode @state)))))
+   (dosync (ref-set udata (UserData. "Initialization" [] [] (.mode @state)))))
 
 (def add-pending-point ^{:actname "add vertex" :doc "Add a pending point to the world."}
    (fn [^Point2D wp]
@@ -239,7 +261,7 @@
    "Call ref-updating f (no other side effects) with arguments. Uses :actname metadata found on f to add to undo buffer."
    [f & args]
    (dosync
-      (let [old-state (assoc (assoc @udata :saved-view @view) :saved-mode (.mode @state))]
+      (let [old-state (assoc @udata :saved-mode (.mode @state))]
          (apply f args) ; change @udata
          (let [new-state (assoc @udata :act (:actname (meta f)))]
             (ref-set data-past (conj @data-past old-state))
@@ -365,10 +387,21 @@
    (.repaint (.canvas @gui)))
 
 (defn update-mode!
+   "Determine mode from user data state."
+   []
+   false ;TODO
+   )
+
+(defn reflect-mode!
    "Update mode-dependent GUI elements."
    []
    false ;TODO
    )
+
+(defn reflect-pose!
+   "Update pose-dependent GUI elements."
+   []
+   (.setValue (.spinner-rot @gui) (.view-rot @view)))
 
 ;-- Event handlers --;
 
@@ -387,12 +420,10 @@
       (dosync
          (when (has-history? from)
             (slide-history! from to)
-            (assoc-in-ref! view [] (.saved-view @udata))
             (assoc-in-ref! state [:mode] (.saved-mode @udata))))
-      (update-canvas-depends!) ; canvas may have changed shape
       (ask-redraw)
       (reflect-history-state!)
-      (update-mode!)))
+      (reflect-mode!))) ; TODO reset temporary state like ProgState.posing?
 
 (defn do-maybe-exit
    "Exit, or possible ask user to save data first."
@@ -415,7 +446,8 @@
                     (= (.mode @state) :manipulate))
          (act! add-pending-point (loc-from-view (.getX e) (.getY e)))
          (update-mode!)
-         (ask-redraw))))
+         (ask-redraw)
+         (reflect-mode!))))
 
 (defn canvas-drag
    [^MouseMoveEvent e]
@@ -477,45 +509,71 @@
       (.add (doto (JMenu. "Mode")
                (.add (create! gui [:mi-pose] new-mi-pose))))))
 
+(defn ^JSpinner new-pose-rotate
+   "Make the spinner for viewpoint rotation."
+   []
+   (let [nm (SpinnerNumberModel. default-view-rot nil nil 0.03) ; radians!
+         js (JSpinner. nm)
+         ned (JSpinner$NumberEditor. js "#####0.00")]
+      (-> ned (.getTextField) (.setColumns 5))
+      (doto js
+         (.setEditor ned)
+         (.addChangeListener
+            (proxy [ChangeListener] []
+               (stateChanged [_]
+                  (update-pose!)
+                  (ask-redraw)))))))
+
+(defn ^JPanel new-pose-panel
+   "Make a Pose panel"
+   []
+   (doto (JPanel.)
+      (.add (create! gui [:spinner-rot] new-pose-rotate))))
+
 (defn ^JPanel new-controls
    "Make a control panel."
    []
-   (doto (JPanel.)
-      (.setMinimumSize (Dimension. 300 600))))
+   (let [p (JPanel.)]
+      (doto p
+         (.setLayout (BoxLayout. p BoxLayout/PAGE_AXIS))
+         (.add (new-pose-panel)))))
 
 (defn ^JComponent new-canvas
    "Make a drawing canvas."
    []
-   (doto (proxy [JComponent] []
-            (paint [^Graphics2D g] (render g)))
-      (.setDoubleBuffered true)
-      (.setMinimumSize (Dimension. 10 10))
-      (.setPreferredSize (Dimension. 600 600))
-      (.addMouseListener
-         (proxy [MouseAdapter] []
-            (mouseClicked [e] (canvas-click e))))
-      (.addMouseMotionListener
-         (proxy [MouseMotionAdapter] []
-            (mouseDragged [e] (canvas-drag e))))
-      (.addMouseWheelListener
-         (proxy [MouseWheelListener] []
-            (mouseWheelMoved [e] (canvas-scroll e))))
-      (.addComponentListener
-         (proxy [ComponentAdapter] []
-            (componentResized [_]
-               (update-canvas-depends!)
-               (ask-redraw))))))
+   (let [jc (proxy [JComponent] []
+               (paint [^Graphics2D g] (render g)))]
+      (doto jc
+         (.setDoubleBuffered true)
+         (.setMinimumSize (Dimension. 10 10))
+         (.setPreferredSize (Dimension. 600 600))
+         (.addMouseListener
+            (proxy [MouseAdapter] []
+               (mouseClicked [e] (canvas-click e))))
+         (.addMouseMotionListener
+            (proxy [MouseMotionAdapter] []
+               (mouseDragged [e] (canvas-drag e))))
+         (.addMouseWheelListener
+            (proxy [MouseWheelListener] []
+               (mouseWheelMoved [e] (canvas-scroll e))))
+         (.addComponentListener
+            (proxy [ComponentAdapter] []
+               (componentResized [_]
+;                  (when (.canvas @gui) ; may not be initialized yet
+                     (update-canvas-depends!)
+                     (ask-redraw)))))));)
 
 (defn ^JFrame new-frame
    "Make the application window."
    []
-   (doto (JFrame.)
-      (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
-      (.setJMenuBar (create! gui [:menu] new-menu))
-      (.setLayout (BorderLayout. 0 0))
-      (.add (create! gui [:controls] new-controls) BorderLayout/LINE_START)
-      (.add (create! gui [:canvas] new-canvas) BorderLayout/CENTER)
-      (.pack)))
+   (let [fr (JFrame. "CS4300 HW3 - TimMc")]
+      (doto fr
+         (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
+         (.setJMenuBar (create! gui [:menu] new-menu))
+         (.setLayout (BoxLayout. (.getContentPane fr) BoxLayout/LINE_AXIS))
+         (.add (create! gui [:controls] new-controls))
+         (.add (create! gui [:canvas] new-canvas))
+         (.pack))))
 
 ;-- Setup --;
 
