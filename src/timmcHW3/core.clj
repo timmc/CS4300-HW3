@@ -252,7 +252,7 @@
 (defn maybe-exit
    "Exit, or possible ask user to save data first."
    []
-   (.dispose frame))
+   (.dispose ^JFrame @frame))
 
 ;-- Math --;
 
@@ -460,8 +460,12 @@
          (proxy [ComponentAdapter] []
             (componentResized [_] (update-canvas-depends!))))))
 
-(def ^{:doc "Application window." :tag JFrame}
-   frame
+(def frame (ref nil))
+
+; If this were't a function, the window would lauch at compile time...
+(defn ^JFrame make-frame
+   "Make the application window."
+   []
    (doto (JFrame.)
       (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
       (.setJMenuBar menu)
@@ -469,15 +473,17 @@
       (.add controls BorderLayout/LINE_START)
       (.add canvas BorderLayout/CENTER)
       (.pack)))
-    
+
 ;-- Setup --;
 
 (defn launch
    "Create and display the GUI."
    []
-   (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
-   (update-canvas-depends!)
-   (.setVisible frame true))
+   (let [fr (make-frame)]
+      (dosync (ref-set frame fr))
+      (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
+      (update-canvas-depends!)
+      (.setVisible fr true)))
 
 (defn -main
    "Main sequence" ;FIXME
