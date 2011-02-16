@@ -8,13 +8,26 @@
             [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
    (:gen-class))
 
-;-- Globals --;
-
-(declare ^JFrame frame
-         ^JComponent canvas
-         ^JMenuItem mi-undo
-         ^JMenuItem mi-redo)
-
+(defrecord ^{:doc "GUI components."}
+   GUI
+   [^{:doc "Application window." :tag JFrame}
+      frame
+      ^{:doc "Toolbox buttons." :tag JPanel}
+      controls
+      ^{:doc "Drawing canvas." :tag JComponent}
+      canvas
+      ^{:doc "Application menubar." :tag JMenuBar}
+      menu
+      ^{:doc "Undo menu item." :tag JMenuItem}
+      mi-undo
+      ^{:doc "Redo menu item." :tag JMenuItem}
+      mi-redo
+      ])
+    
+(def ^{:doc "The viewpoint's state."}
+   gui
+   (ref (GUI. nil nil nil nil nil nil)))
+    
 ;-- Fixes --;
 
 (defn update-in0
@@ -54,6 +67,17 @@
           (dosync
              (ref-set ref-val# (-> (deref ref-val#) ~@assocs))))))
 
+; This is done as a macro in order to preserve type hinting.
+(defmacro create!
+   "Call the function on the restargs, assoc-in the returned value in the ref using the keys vector, and return the value."
+   [ref-expr ks-expr f-expr & arg-exprs]
+   `(let [ref-val# ~ref-expr
+            keys-val# ~ks-expr
+            mk-val# (~f-expr ~@arg-exprs)]
+       (dosync
+          (ref-set ref-val#
+             (assoc-in0 (deref ref-val#) keys-val# mk-val#)))
+       mk-val#))
 
 ;-- Conventions --;
 
@@ -195,21 +219,23 @@
 (defn reflect-history-state!
    "Reflect current undo/redo state into GUI."
    []
-   (if (can-undo?)
-      (doto mi-undo
-         (.setEnabled true)
-         (.setText (str "Undo " (:act @*udata*))))
-      (doto mi-undo
-         (.setEnabled false)
-         (.setText "Nothing to undo")))
-   (if (can-redo?)
-      (doto mi-redo
-         (.setEnabled true)
-         (.setText (str "Redo " (:act (first @data-future)))))
-      (doto mi-redo
-         (.setEnabled false)
-         (.setText "Nothing to redo"))))
-    
+   (let [^JMenuItem mi-undo (.mi-undo ^GUI @gui)
+         ^JMenuItem mi-redo (.mi-redo ^GUI @gui)]
+      (if (can-undo?)
+         (doto mi-undo
+            (.setEnabled true)
+            (.setText (str "Undo " (:act @*udata*))))
+         (doto mi-undo
+            (.setEnabled false)
+            (.setText "Nothing to undo")))
+      (if (can-redo?)
+         (doto mi-redo
+            (.setEnabled true)
+            (.setText (str "Redo " (:act (first @data-future)))))
+         (doto mi-redo
+            (.setEnabled false)
+            (.setText "Nothing to redo")))))
+   
 ; TODO define helper arity to take a keyword for just acting on that element
 (defn act!
    "Call f with current *udata* state and any additional arguments, accepting result as new state. The 'overrides' map arg may override :udata-sel and :actname metadata found on f."
@@ -217,7 +243,7 @@
    (dosync
       (let [cur-state @*udata*
             fkeys (select-keys (meta f) [:actname])
-            metadata (merge {:udata-sel [] :actname ""} fkeys overrides) ; defaults, function-specified, overrides
+            metadata (merge {:udata-sel [] :actname ""} fkeys overrides);FIXME strings not showing properly on undo ; defaults, function-specified, overrides
             next-state (apply update-in0 cur-state (:udata-sel (meta f)) f args)
             next-state (assoc next-state :act (:actname metadata))]
          (ref-set data-past (conj @data-past cur-state))
@@ -232,27 +258,6 @@
       (ref-set to (conj @to @state))
       (ref-set *udata* (first @from))
       (ref-set from (rest @from))))
-
-(defn undo!
-   "Undo to previous state, if possible. Does not trigger redraw."
-   []
-   (dosync
-      (when (can-undo?)
-         (slide-history! data-past *udata* data-future)))
-   (reflect-history-state!))
-
-(defn redo!
-   "Redo to subsequent state, if possible. Does not trigger redraw."
-   []
-   (dosync
-      (when (can-redo?)
-         (slide-history! data-future *udata* data-past)))
-   (reflect-history-state!))
-
-(defn maybe-exit
-   "Exit, or possible ask user to save data first."
-   []
-   (.dispose ^JFrame @frame))
 
 ;-- Math --;
 
@@ -362,12 +367,50 @@
    (draw-spline g)
    (draw-pending g (:pending-points @*udata*)))
 
+;=====;
+; GUI ;
+;=====;
+
+;-- Event handlers --;
+
+(defn undo!
+   "Undo to previous state, if possible. Does not trigger redraw."
+   []
+   (dosync
+      (when (can-undo?)
+         (slide-history! data-past *udata* data-future)))
+   (reflect-history-state!))
+    
+(defn redo!
+   "Redo to subsequent state, if possible. Does not trigger redraw."
+   []
+   (dosync
+      (when (can-redo?)
+         (slide-history! data-future *udata* data-past)))
+   (reflect-history-state!))
+    
+(defn maybe-exit
+   "Exit, or possible ask user to save data first."
+   []
+   (.dispose ^JFrame (.frame ^GUI @gui)))
+
+(defn update-canvas-depends!
+   "Update variables that depend on the canvas size or other state."
+   []
+   (dosync
+      (let [dim (.getSize ^JComponent (.canvas ^GUI @gui))
+            [dim-w dim-h] (de-dim dim)]
+         (assoc-in-ref! *view*
+            [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
+            [:viewport-dim] dim)
+         (update-xform!))))
+    
 ;-- Event interpretation --;
 
 (defn ask-redraw
    "Ask for the canvas to be redrawn."
    []
-   (.repaint canvas))
+   (.repaint ^JComponent (.canvas ^GUI @gui)))
 
 (defn canvas-click
    "A click event has occurred on the canvas."
@@ -386,9 +429,10 @@
 
 ;-- Components --;
 
-;TODO: Do event handlers need to use (binding *state*)?
+; We define these in functions so they are not created at compile-time.
 
-(def ^{:tag JMenuItem} mi-undo
+(defn ^JMenuItem new-mi-undo
+   []
    (doto (JMenuItem. "Undo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -398,7 +442,8 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
-(def ^{:tag JMenuItem} mi-redo
+(defn ^JMenuItem new-mi-redo
+   []
    (doto (JMenuItem. "Redo")
       (.addActionListener
          (proxy [ActionListener] []
@@ -408,7 +453,8 @@
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
-(def ^{:tag JMenuItem} mi-exit
+(defn ^JMenuItem new-mi-exit
+   []
    (doto (JMenuItem. "Exit")
       (.addActionListener
          (proxy [ActionListener] []
@@ -416,32 +462,24 @@
                (maybe-exit))))
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
 
-(def ^{:doc "Menu bar for window." :tag JMenuBar} menu
+(defn ^JMenuBar new-menu
+   "Make a menu bar."
+   []
    (doto (JMenuBar.)
       (.add (doto (JMenu. "Spline")
-               (.add mi-undo)
-               (.add mi-redo)
-               (.add mi-exit)))))
+               (.add (create! gui [:mi-undo] new-mi-undo))
+               (.add (create! gui [:mi-redo] new-mi-redo))
+               (.add (new-mi-exit))))))
 
-(def ^{:doc "Control panel" :tag JPanel}
-   controls
+(defn ^JPanel new-controls
+   "Make a control panel."
+   []
    (doto (JPanel.)
       (.setMinimumSize (Dimension. 300 600))))
 
-
-(defn update-canvas-depends!
-   "Update variables that depend on the canvas size or other state."
+(defn ^JComponent new-canvas
+   "Make a drawing canvas."
    []
-   (dosync
-      (let [^Dimension dim (.getSize canvas)
-            [dim-w dim-h] (de-dim dim)]
-         (assoc-in-ref! *view*
-            [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2))
-            [:viewport-dim] dim)
-         (update-xform!))))
-
-(def ^{:doc "Drawing canvas" :tag JComponent}
-   canvas
    (doto (proxy [JComponent] []
             (paint [^Graphics2D g] (render g)))
       (.setDoubleBuffered true)
@@ -460,18 +498,15 @@
          (proxy [ComponentAdapter] []
             (componentResized [_] (update-canvas-depends!))))))
 
-(def frame (ref nil))
-
-; If this were't a function, the window would lauch at compile time...
-(defn ^JFrame make-frame
+(defn ^JFrame new-frame
    "Make the application window."
    []
    (doto (JFrame.)
       (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
-      (.setJMenuBar menu)
+      (.setJMenuBar (create! gui [:menu] new-menu))
       (.setLayout (BorderLayout. 0 0))
-      (.add controls BorderLayout/LINE_START)
-      (.add canvas BorderLayout/CENTER)
+      (.add (create! gui [:controls] new-controls) BorderLayout/LINE_START)
+      (.add (create! gui [:canvas] new-canvas) BorderLayout/CENTER)
       (.pack)))
 
 ;-- Setup --;
@@ -479,14 +514,13 @@
 (defn launch
    "Create and display the GUI."
    []
-   (let [fr (make-frame)]
-      (dosync (ref-set frame fr))
+   (let [frame (create! gui [:frame] new-frame)]
       (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
       (update-canvas-depends!)
-      (.setVisible fr true)))
+      (.setVisible frame true)))
 
 (defn -main
-   "Main sequence" ;FIXME
+   "Start application. Takes no arguments."
    [& args]
    (SwingUtilities/invokeLater launch))
 
