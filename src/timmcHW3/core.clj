@@ -530,6 +530,16 @@
        (BorderFactory/createTitledBorder title)
        (BorderFactory/createCompoundBorder (BorderFactory/createEmptyBorder 4 4 4 4))))
 
+(defn ^Component make-vertical-layout
+   "Lay out a series of components as a vertical stack with an expanding south. Not tail-recursive."
+   [c & more]
+   (let [cont (JPanel.)]
+      (.setLayout cont (BorderLayout.))
+      (.add cont c BorderLayout/NORTH)
+      (when (seq more)
+         (.add cont (apply make-vertical-layout more) BorderLayout/CENTER))
+      cont))
+
 (defn ^JSpinner new-pose-rotate
    "Make the spinner for viewpoint rotation."
    []
@@ -574,8 +584,8 @@
    []
    (let [p (JPanel.)]
       (doto p
-         (.setLayout (BoxLayout. p BoxLayout/PAGE_AXIS))
-         (.add (new-pose-panel)))))
+         (.add (make-vertical-layout
+                  (new-pose-panel))))))
 
 (defn ^JComponent new-canvas
    "Make a drawing canvas."
