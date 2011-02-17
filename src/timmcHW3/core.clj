@@ -1,9 +1,10 @@
 (ns timmcHW3.core
    "Core code. Use -main."
    (:import
-      [javax.swing SwingUtilities UIManager BoxLayout
+      [javax.swing SwingUtilities UIManager BoxLayout BorderFactory
          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton JSpinner SpinnerNumberModel JSpinner$NumberEditor
          KeyStroke]
+      [javax.swing.border Border EtchedBorder]
       [javax.swing.event ChangeListener]
       [java.awt Dimension Component BorderLayout
          Graphics2D RenderingHints Color BasicStroke]
@@ -523,6 +524,12 @@
       (.add (doto (JMenu. "Mode")
                (.add (create! gui [:mi-pose] new-mi-pose))))))
 
+(defn ^Border make-controls-border
+   [title]
+   (-> (BorderFactory/createEtchedBorder EtchedBorder/LOWERED)
+       (BorderFactory/createTitledBorder title)
+       (BorderFactory/createCompoundBorder (BorderFactory/createEmptyBorder 4 4 4 4))))
+
 (defn ^JSpinner new-pose-rotate
    "Make the spinner for viewpoint rotation."
    []
@@ -558,6 +565,7 @@
    []
    (let [p (JPanel.)]
       (doto p
+         (.setBorder (make-controls-border "Position"))
          (.add (create! gui [:spinner-rot] new-pose-rotate))
          (.add (create! gui [:spinner-zoom] new-pose-zoom)))))
 
