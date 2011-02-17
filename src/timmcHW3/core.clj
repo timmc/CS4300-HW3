@@ -5,7 +5,7 @@
          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton JSpinner SpinnerNumberModel JSpinner$NumberEditor
          KeyStroke]
       [javax.swing.event ChangeListener]
-      [java.awt Dimension Component
+      [java.awt Dimension Component BorderLayout
          Graphics2D RenderingHints Color BasicStroke]
       [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
          Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
@@ -30,12 +30,14 @@
      mi-pose
     ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
      spinner-rot
+    ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
+     spinner-zoom
     ])
 
 (def ^{:doc "The viewpoint's state."} gui (ref nil))
 
 (defn init-gui []
-   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil))))
+   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil))))
     
 ;-- Fixes --;
 
@@ -127,8 +129,23 @@
    ])
 
 (def default-rot-center [0 0])
-(def default-view-minspect 200)
+(def default-view-minspect 100)
 (def default-view-rot 0.0)
+
+; constants and precomputations for scaling
+(def double-step 0.1)
+(def standard-scale (Math/log default-view-minspect))
+(def double-diff (- (Math/log 2) (Math/log 1)))
+
+(defn minspect-to-zoom
+   "Linear to 1-based scale."
+   [m]
+   (- 1 (* (/ (- (Math/log m) standard-scale) double-diff) double-step)))
+
+(defn zoom-to-minspect
+   "1-based scale to linear."
+   [z]
+   (Math/exp (+ (* (/ (- 1 z) double-step) double-diff) standard-scale)))
 
 (def ^{:doc "The viewpoint's state."} view (ref nil))
 
@@ -169,8 +186,10 @@
    "Update view based on current state of Pose spinners."
    []
    (dosync
-      (let [rot (double (.getValue (.spinner-rot @gui)))]
-         (assoc-in-ref! view [:view-rot] rot))
+      (let [rot (double (.getValue (.spinner-rot @gui)))
+            minspect (zoom-to-minspect (.getValue (.spinner-zoom @gui)))]
+         (assoc-in-ref! view [:view-rot] rot)
+         (assoc-in-ref! view [:view-minspect] minspect))
       (update-xform!)))
 
 (defn init-view
@@ -371,9 +390,9 @@
          (.draw (Rectangle2D$Double. cx 0 0.1 h))
          (.draw (Rectangle2D$Double. 0 cy w 0.1))))
    (test-draw-point g Color/WHITE 0 0) ; center
-   (test-draw-point g Color/GREEN -50 0) ; left
-   (test-draw-point g Color/RED 50 0) ; right
-   (test-draw-point g Color/BLUE 0 50) ; up
+   (test-draw-point g Color/GREEN -20 0) ; left
+   (test-draw-point g Color/RED 20 0) ; right
+   (test-draw-point g Color/BLUE 0 20) ; up
    (draw-spline g)
    (draw-pending g (.pending-points @udata)))
 
@@ -397,11 +416,6 @@
    []
    false ;TODO
    )
-
-(defn reflect-pose!
-   "Update pose-dependent GUI elements."
-   []
-   (.setValue (.spinner-rot @gui) (.view-rot @view)))
 
 ;-- Event handlers --;
 
@@ -514,7 +528,22 @@
    []
    (let [nm (SpinnerNumberModel. default-view-rot nil nil 0.03) ; radians!
          js (JSpinner. nm)
-         ned (JSpinner$NumberEditor. js "#####0.00")]
+         ned (JSpinner$NumberEditor. js "#####0.000")]
+      (-> ned (.getTextField) (.setColumns 5))
+      (doto js
+         (.setEditor ned)
+         (.addChangeListener
+            (proxy [ChangeListener] []
+               (stateChanged [_]
+                  (update-pose!)
+                  (ask-redraw)))))))
+
+(defn ^JSpinner new-pose-zoom
+   "Make the spinner for viewpoint zooming."
+   []
+   (let [nm (SpinnerNumberModel. (minspect-to-zoom default-view-minspect) 0.001 20.0 0.003) ; log scale, higher is greater mag
+         js (JSpinner. nm)
+         ned (JSpinner$NumberEditor. js "#####0.000")]
       (-> ned (.getTextField) (.setColumns 5))
       (doto js
          (.setEditor ned)
@@ -527,8 +556,10 @@
 (defn ^JPanel new-pose-panel
    "Make a Pose panel"
    []
-   (doto (JPanel.)
-      (.add (create! gui [:spinner-rot] new-pose-rotate))))
+   (let [p (JPanel.)]
+      (doto p
+         (.add (create! gui [:spinner-rot] new-pose-rotate))
+         (.add (create! gui [:spinner-zoom] new-pose-zoom)))))
 
 (defn ^JPanel new-controls
    "Make a control panel."
@@ -570,9 +601,9 @@
       (doto fr
          (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
          (.setJMenuBar (create! gui [:menu] new-menu))
-         (.setLayout (BoxLayout. (.getContentPane fr) BoxLayout/LINE_AXIS))
-         (.add (create! gui [:controls] new-controls))
-         (.add (create! gui [:canvas] new-canvas))
+         (.setLayout (BorderLayout.))
+         (.add (create! gui [:controls] new-controls) BorderLayout/LINE_START)
+         (.add (create! gui [:canvas] new-canvas) BorderLayout/CENTER)
          (.pack))))
 
 ;-- Setup --;
