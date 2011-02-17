@@ -1,5 +1,7 @@
 (ns timmcHW3.core
    "Core code. Use -main."
+   (:use timmcHW3.utils)
+   (:use timmcHW3.drawing)
    (:import
       [javax.swing SwingUtilities UIManager BoxLayout BorderFactory
          JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton JSpinner SpinnerNumberModel JSpinner$NumberEditor
@@ -39,76 +41,7 @@
 
 (defn init-gui []
    (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil))))
-    
-;-- Fixes --;
 
-(defn update-in0
-   "A version of update-in that works with an empty collection of keys."
-   [m ks f & args]
-   (if (seq ks)
-      (apply update-in m ks f args)
-      (apply f m args)))
-
-(defn assoc-in0
-   "A version of assoc-in that works with an empty collection of keys."
-   [m ks v]
-   (if (seq ks)
-      (assoc-in m ks v)
-      v))
-
-; Currently works just fine in Clojure, but is here for symmetry.
-(defn get-in0
-   "A version of get-in that works with an empty collection of keys."
-   [m ks]
-   (if (seq ks)
-      (get-in m ks)
-      m))
-
-;-- Utility --;
-
-(defn assoc-in-ref!
-   "Update an associative ref with a new value given a key vector. Evals to true if changed, false otherwise."
-   [aref ks v]
-   (let [old-val (get-in0 @aref ks)]
-      (if (= v old-val)
-         false
-         (dosync
-            (ref-set aref (assoc-in0 @aref ks v))
-            true))))
-
-
-; This is done as a macro in order to preserve type hinting.
-(defmacro create!
-   "Call the function on the restargs, assoc-in the returned value in the ref using the keys vector, and return the value."
-   [ref-expr ks-expr f-expr & arg-exprs]
-   `(let [ref-val# ~ref-expr
-            keys-val# ~ks-expr
-            mk-val# (~f-expr ~@arg-exprs)]
-       (dosync
-          (ref-set ref-val#
-             (assoc-in0 (deref ref-val#) keys-val# mk-val#)))
-       mk-val#))
-
-;-- Conventions --;
-
-;;; Coordinates, points, and 2-vectors are represented as [x y] pairs.
-;;; All curve data is represented in standard Cartesian world coordinates.
-
-(defn de-dim
-   "Read a Dimension object into a 2-vector of width, height."
-   [^Dimension d]
-   [(.width d) (.height d)])
-
-(defn de-pt
-   "Read a Point2D$Double object into a 2-vector of x, y."
-   [^Point2D$Double p]
-   [(.getX p) (.getY p)])
-
-;-- Constants --;
-
-(def ^{:doc "Multiplier for incremental zoom in."}
-   zoom-factor 1.1)
-    
 ;-- Viewpoint --;
 
 (defrecord ^{:doc "Viewport state."}
@@ -332,37 +265,11 @@
          (.setPaint c)
          (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
 
-(def ^Color control-sement-color Color/YELLOW)
-(def ^BasicStroke control-segment-stroke
-   (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
-
-(defn draw-control-segments
-   "Draw segments of a control polygon."
-   [^Graphics2D g, points]
-   (loop [^Point2D prev (first points)
-          remain (next points)]
-      (when remain
-         (let [cur (first remain)]
-            (.setColor g Color/BLUE)
-            (.setStroke g control-segment-stroke)
-            (.draw g (Line2D$Double. (loc-to-view prev) (loc-to-view cur)))
-            (recur cur (next remain))))))
-
-(def ^Color control-point-color Color/GREEN)
-
-(defn draw-control-points
-   "Draw vertices of a control polygon."
-   [^Graphics2D g, points]
-   (doseq [p points]
-      (let [[vcx vcy] (de-pt (loc-to-view p))]
-         (.setColor g control-point-color)
-         (.fill g (Ellipse2D$Double. (- vcx 3) (- vcy 3) 6 6)))))
-
 (def ^Color curve-pending-color Color/RED)
 (def ^Color spline-color Color/RED)
 (def ^BasicStroke curve-stroke
    (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
-    
+
 (defn draw-spline
    "Draw the main user spline"
    [^Graphics2D g]
@@ -371,8 +278,8 @@
 (defn draw-pending
    "Draw a potentially incomplete curve."
    [^Graphics2D g, points]
-   (draw-control-segments g points)
-   (draw-control-points g points)
+   (draw-control-segments g (map loc-to-view points))
+   (draw-control-points g (map loc-to-view points))
    (when (= (count points) 4)
       (.setColor g curve-pending-color)
       (.setStroke g curve-stroke)
@@ -643,4 +550,4 @@
    [& args]
    (SwingUtilities/invokeLater launch))
 
-
+;TODO: Add action listeners after interface is entirely set up?
