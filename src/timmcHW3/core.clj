@@ -358,9 +358,13 @@
    "A click event has occurred on the canvas."
    [^MouseEvent e]
    (dosync
-      (when-not (or (.posing? @state)
-                    (.dragging? @state)
-                    (= (.mode @state) :manipulate))
+      (when (and (= (.getButton e) MouseEvent/BUTTON1)
+                 (not (.isShiftDown e))
+                 (not (.isControlDown e))
+                 (not (.posing? @state))
+                 (not (.dragging? @state))
+                 (.getState (.mi-view-control @gui))
+                 (not= (.mode @state) :manipulate))
          (act! add-pending-point (loc-from-view (.getX e) (.getY e)))
          (update-mode!)
          (ask-redraw)
