@@ -29,6 +29,8 @@
      mi-undo
     ^{:doc "Redo menu item." :tag JMenuItem}
      mi-redo
+    ^{:doc "Exit menu item." :tag JMenuItem}
+     mi-exit
     ^{:doc "View control polygon toggle button." :tag JCheckBoxMenuItem}
      mi-view-control
     ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
@@ -40,7 +42,7 @@
 (def ^{:doc "The viewpoint's state."} gui (ref nil))
 
 (defn init-gui []
-   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil))))
+   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil nil))))
 
 ;-- Viewpoint --;
 
@@ -383,52 +385,37 @@
 ; We define these in functions so they are not created at compile-time.
 
 (defn ^JMenuItem new-mi-undo
-   []
+   [rgui]
    (doto (JMenuItem. "Undo")
-      (.addActionListener
-         (proxy [ActionListener] []
-            (actionPerformed [_]
-               (do-history! true))))
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
 (defn ^JMenuItem new-mi-redo
-   []
+   [rgui]
    (doto (JMenuItem. "Redo")
-      (.addActionListener
-         (proxy [ActionListener] []
-            (actionPerformed [_]
-               (do-history! false))))
       (.setEnabled false)
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
 (defn ^JMenuItem new-mi-exit
-   []
+   [rgui]
    (doto (JMenuItem. "Exit")
-      (.addActionListener
-         (proxy [ActionListener] []
-            (actionPerformed [_]
-               (do-maybe-exit))))
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
 
 (defn ^JCheckBoxMenuItem new-mi-view-control
-   []
-   (doto (JCheckBoxMenuItem. "Show control polygon" true)
-      (.addActionListener
-         (proxy [ActionListener] []
-            (actionPerformed [_]
-               (ask-redraw))))))
+   [rgui]
+   (JCheckBoxMenuItem. "Show control polygon" true))    
 
 (defn ^JMenuBar new-menu
    "Make a menu bar."
-   []
+   [rgui]
    (doto (JMenuBar.)
+      (.setEnabled false)
       (.add (doto (JMenu. "Spline")
-               (.add (create! gui [:mi-undo] new-mi-undo))
-               (.add (create! gui [:mi-redo] new-mi-redo))
-               (.add (new-mi-exit))))
+               (.add (create! rgui [:mi-undo] new-mi-undo rgui))
+               (.add (create! rgui [:mi-redo] new-mi-redo rgui))
+               (.add (create! rgui [:mi-exit] new-mi-exit rgui))))
       (.add (doto (JMenu. "View")
-               (.add (create! gui [:mi-view-control] new-mi-view-control))))))
+               (.add (create! rgui [:mi-view-control] new-mi-view-control rgui))))))
 
 (defn ^Border make-controls-border
    [title]
@@ -448,86 +435,115 @@
 
 (defn ^JSpinner new-pose-rotate
    "Make the spinner for viewpoint rotation."
-   []
+   [rgui]
    (let [nm (SpinnerNumberModel. default-view-rot nil nil 0.03) ; radians!
          js (JSpinner. nm)
          ned (JSpinner$NumberEditor. js "#####0.000")]
       (-> ned (.getTextField) (.setColumns 5))
-      (doto js
-         (.setEditor ned)
-         (.addChangeListener
-            (proxy [ChangeListener] []
-               (stateChanged [_]
-                  (update-pose!)
-                  (ask-redraw)))))))
+      (.setEditor js ned)
+      js))
 
 (defn ^JSpinner new-pose-zoom
    "Make the spinner for viewpoint zooming."
-   []
+   [rgui]
    (let [nm (SpinnerNumberModel. (minspect-to-zoom default-view-minspect) 0.001 20.0 0.003) ; log scale, higher is greater mag
          js (JSpinner. nm)
          ned (JSpinner$NumberEditor. js "#####0.000")]
       (-> ned (.getTextField) (.setColumns 5))
-      (doto js
-         (.setEditor ned)
-         (.addChangeListener
-            (proxy [ChangeListener] []
-               (stateChanged [_]
-                  (update-pose!)
-                  (ask-redraw)))))))
+      (.setEditor js ned)
+      js))
 
 (defn ^JPanel new-pose-panel
-   "Make a Pose panel"
-   []
+   "Make a Pose panel."
+   [rgui]
    (let [p (JPanel.)]
       (doto p
          (.setBorder (make-controls-border "Position"))
-         (.add (create! gui [:spinner-rot] new-pose-rotate))
-         (.add (create! gui [:spinner-zoom] new-pose-zoom)))))
+         (.add (create! rgui [:spinner-rot] new-pose-rotate rgui))
+         (.add (create! rgui [:spinner-zoom] new-pose-zoom rgui)))))
 
 (defn ^JPanel new-controls
    "Make a control panel."
-   []
+   [rgui]
    (let [p (JPanel.)]
       (doto p
          (.add (make-vertical-layout
-                  (new-pose-panel))))))
+                  (new-pose-panel rgui))))))
 
 (defn ^JComponent new-canvas
    "Make a drawing canvas."
-   []
+   [rgui]
    (let [jc (proxy [JComponent] []
                (paint [^Graphics2D g] (render g)))]
       (doto jc
          (.setDoubleBuffered true)
          (.setMinimumSize (Dimension. 10 10))
-         (.setPreferredSize (Dimension. 600 600))
-         (.addMouseListener
-            (proxy [MouseAdapter] []
-               (mouseClicked [e] (canvas-click e))))
-         (.addMouseMotionListener
-            (proxy [MouseMotionAdapter] []
-               (mouseDragged [e] (canvas-drag e))))
-         (.addMouseWheelListener
-            (proxy [MouseWheelListener] []
-               (mouseWheelMoved [e] (canvas-scroll e))))
-         (.addComponentListener
-            (proxy [ComponentAdapter] []
-               (componentResized [_]
-;                  (when (.canvas @gui) ; may not be initialized yet
-                     (update-canvas-depends!)
-                     (ask-redraw)))))));)
+         (.setPreferredSize (Dimension. 600 600)))))
+
+(defn enliven!
+   "Add action listeners to GUI components."
+   [rgui]
+   (doto (.mi-undo @rgui)
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (do-history! true)))))
+   (doto (.mi-redo @rgui)
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (do-history! false)))))
+   (doto (.mi-view-control @rgui)
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (ask-redraw)))))
+   (doto (.mi-exit @rgui)
+      (.addActionListener
+         (proxy [ActionListener] []
+            (actionPerformed [_]
+               (do-maybe-exit)))))
+   (doto (.menu @rgui)
+      (.setEnabled true))
+   ; done with menus
+   (doto (.spinner-rot @rgui)
+      (.addChangeListener
+         (proxy [ChangeListener] []
+            (stateChanged [_]
+               (update-pose!)
+               (ask-redraw)))))
+   (doto (.spinner-zoom @rgui)
+      (.addChangeListener
+         (proxy [ChangeListener] []
+            (stateChanged [_]
+               (update-pose!)
+               (ask-redraw)))))
+   (doto (.canvas @rgui)
+      (.addMouseListener
+         (proxy [MouseAdapter] []
+            (mouseClicked [e] (canvas-click e))))
+      (.addMouseMotionListener
+         (proxy [MouseMotionAdapter] []
+            (mouseDragged [e] (canvas-drag e))))
+      (.addMouseWheelListener
+         (proxy [MouseWheelListener] []
+            (mouseWheelMoved [e] (canvas-scroll e))))
+      (.addComponentListener
+         (proxy [ComponentAdapter] []
+            (componentResized [_]
+               (update-canvas-depends!)
+               (ask-redraw))))))
 
 (defn ^JFrame new-frame
    "Make the application window."
-   []
+   [rgui]
    (let [fr (JFrame. "CS4300 HW3 - TimMc")]
       (doto fr
          (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
-         (.setJMenuBar (create! gui [:menu] new-menu))
+         (.setJMenuBar (create! rgui [:menu] new-menu rgui))
          (.setLayout (BorderLayout.))
-         (.add (create! gui [:controls] new-controls) BorderLayout/LINE_START)
-         (.add (create! gui [:canvas] new-canvas) BorderLayout/CENTER)
+         (.add (create! rgui [:controls] new-controls rgui) BorderLayout/LINE_START)
+         (.add (create! rgui [:canvas] new-canvas rgui) BorderLayout/CENTER)
          (.pack))))
 
 ;-- Setup --;
@@ -537,11 +553,12 @@
    []
    (init-state)
    (init-gui)
-   (let [frame (create! gui [:frame] new-frame)]
+   (let [frame (create! gui [:frame] new-frame gui)]
       (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
       (init-view)
       (init-udata)
       (update-canvas-depends!)
+      (enliven! gui)
       (.setVisible frame true)))
 
 (defn -main
