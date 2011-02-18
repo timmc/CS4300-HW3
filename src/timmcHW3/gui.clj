@@ -16,8 +16,7 @@
 (defn- ^Border make-controls-border
    [title]
    (-> (BorderFactory/createEtchedBorder EtchedBorder/LOWERED)
-       (BorderFactory/createTitledBorder title)
-       (BorderFactory/createCompoundBorder (BorderFactory/createEmptyBorder 4 4 4 4))))
+       (BorderFactory/createTitledBorder title)))
 
 (defn- ^Component make-vertical-layout
    "Lay out a series of components as a vertical stack with an expanding south. Not tail-recursive."
@@ -75,6 +74,19 @@
       (.add (doto (JMenu. "View")
                (.add (create! rgui [:mi-view-control] new-mi-view-control rgui))))))
 
+(defn- ^JButton new-mod-split
+   "Make a 'Split' button."
+   [rgui]
+   (doto (JButton. "Split")
+      (.setToolTipText "Split a curve at a selected point.")))
+
+(defn- ^JPanel new-modify-panel
+   "Make a Modify panel."
+   [rgui]
+   (doto (JPanel.)
+      (.setBorder (make-controls-border "Modify"))
+      (.add (create! rgui [:split] new-mod-split rgui))))
+
 (defn- ^JSpinner new-pose-rotate
    "Make the spinner for viewpoint rotation."
    [rgui]
@@ -112,8 +124,10 @@
    (let [p (JPanel.)]
       (doto p
          (.add (make-vertical-layout 0
+                  (new-modify-panel rgui)
                   (new-pose-panel rgui))))))
 
+;TODO make focusable
 (defn- ^JComponent new-canvas
    "Make a drawing canvas."
    [rgui renderer]
@@ -136,3 +150,4 @@
          (.add (create! rgui [:canvas] new-canvas rgui renderer) BorderLayout/CENTER)
          (.pack))))
 
+;TODO add statusbar

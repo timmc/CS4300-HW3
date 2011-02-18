@@ -5,8 +5,8 @@
       [java.awt.geom AffineTransform]
       [javax.swing JFrame JComponent JPanel
                    JMenu JMenuBar JMenuItem JCheckBoxMenuItem
-                   JSpinner]))
-    
+                   JSpinner JButton]))
+
 (defrecord ^{:doc "GUI components."}
    GUI
    [^{:doc "Application window." :tag JFrame}
@@ -29,7 +29,13 @@
      spinner-rot
     ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
      spinner-zoom
-    ])
+    ^{:doc "Curve splitter button." :tag JButton}
+     split
+   ])
+
+(defn ^GUI make-blank-GUI
+   []
+   (GUI. nil nil nil nil nil nil nil nil nil nil nil))
 
 (defrecord ^{:doc "Viewport state."}
    Viewpoint
@@ -47,7 +53,11 @@
      xform-from-view
     ^{:doc "Dimensions of viewport." :tag Dimension}
      viewport-dim
-    ])
+   ])
+
+(defn ^Viewpoint make-blank-Viewpoint
+   []
+   (Viewpoint. nil nil nil nil nil nil nil))
 
 ;;; Modes:
 ; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
@@ -57,9 +67,12 @@
 (defrecord ^{:doc "Whole-program state."}
    ProgState
    [mode ; overall mode, explained above
-    posing? ; true if in the Pose minor mode
-    dragging? ; true if something is being dragged
+    splitting? ; true if Split is active
    ])
+
+(defn ^ProgState make-blank-ProgState
+   []
+   (ProgState. :extend0 false))
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
    UserData
@@ -68,4 +81,8 @@
     pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
     saved-mode ; ProgState.mode that was active when this state was *first* saved off.
    ])
+
+(defn ^UserData make-blank-UserData
+   []
+   (UserData. "Initialization" [] [] :extend0))
 

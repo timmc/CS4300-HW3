@@ -4,7 +4,7 @@
       [timmcHW3.utils]
       [timmcHW3.drawing]
       [timmcHW3.gui])
-   (:require timmcHW3.state)
+   (:use timmcHW3.state)
    (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
    (:import
       [javax.swing SwingUtilities UIManager
@@ -18,9 +18,9 @@
     (:gen-class))
 
 (def ^{:doc "The viewpoint's state."} gui (ref nil))
-
-(defn init-gui []
-   (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil nil))))
+(def ^{:doc "The viewpoint's state."} view (ref nil))
+(def ^{:doc "Global pointer to current state."} state (ref nil))
+(def ^{:doc "User data that needs undo/redo."} udata (ref nil))
 
 ;-- Viewpoint --;
 
@@ -42,8 +42,6 @@
    "1-based scale to linear."
    [z]
    (Math/exp (+ (* (/ (- 1 z) double-step) double-diff) standard-scale)))
-
-(def ^{:doc "The viewpoint's state."} view (ref nil))
 
 (defn ^AffineTransform calc-xform
    "Calculate the world-to-viewport transformation."
@@ -88,31 +86,7 @@
          (assoc-in-ref! view [:view-minspect] minspect))
       (update-xform!)))
 
-(defn init-view
-   "Initialize the global view ref."
-   []
-   (let [rot ()]
-      (dosync
-         (ref-set view
-            (Viewpoint. default-rot-center
-                        default-view-minspect
-                        default-view-rot
-                        nil nil nil nil)))
-      (update-canvas-depends!)))
-
 ;-- State --;
-
-(def ^{:doc "Global pointer to current state."} state (ref nil))
-
-(defn init-state []
-   (dosync (ref-set state (ProgState. :extend0 false false))))
-
-;-- Data --;
-
-(def ^{:doc "User data that needs undo/redo."} udata (ref nil))
-
-(defn init-udata []
-   (dosync (ref-set udata (UserData. "Initialization" [] [] (.mode @state)))))
 
 (def add-pending-point ^{:actname "add vertex" :doc "Add a pending point to the world."}
    (fn [^Point2D wp]
@@ -334,8 +308,7 @@
       (when (and (= (.getButton e) MouseEvent/BUTTON1)
                  (not (.isShiftDown e))
                  (not (.isControlDown e))
-                 (not (.posing? @state))
-                 (not (.dragging? @state))
+                 (not (.splitting? @state))
                  (.getState (.mi-view-control @gui))
                  (not= (.mode @state) :manipulate))
          (act! add-pending-point (loc-from-view (.getX e) (.getY e)))
@@ -417,12 +390,18 @@
 (defn launch
    "Create and display the GUI."
    []
-   (init-state)
-   (init-gui)
+   (dosync
+      (ref-set state (make-blank-ProgState))
+      (ref-set gui (make-blank-GUI)))
    (let [frame (create! gui [:frame] new-frame gui render)]
       (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
-      (init-view)
-      (init-udata)
+      (dosync
+         (ref-set view
+            (merge (make-blank-Viewpoint)
+                  {:rot-center default-rot-center
+                   :view-minspect default-view-minspect
+                   :view-rot default-view-rot}))
+         (ref-set udata (make-blank-UserData)))
       (reflect-view! view gui)
       (update-canvas-depends!)
       (enliven! gui)
