@@ -279,11 +279,12 @@
    "Draw a potentially incomplete curve."
    [^Graphics2D g, points]
    (draw-control-segments g (map loc-to-view points))
-   (draw-control-points g (map loc-to-view points))
-   (when (= (count points) 4)
+   (draw-control-points g (map loc-to-view points))   
+   (when (> (count points) 2)
       (.setColor g curve-pending-color)
       (.setStroke g curve-stroke)
-      (.draw g (apply view-cubic-curve points))))
+      (.draw g (.createTransformedShape (.xform-to-view @view)
+                                        (de-casteljau points 20))))) ; todo: calc appropriate number of interpolations
     
 (defn render
    "Draw the world."

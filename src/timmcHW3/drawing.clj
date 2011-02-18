@@ -6,7 +6,36 @@
       [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
          Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]))
 
+(defn interpolate-1
+   "Perform a single linear interpolation on a vector of numbers using parameter t. Returns vector of smaller degree."
+   [vals t]
+   (let [rs (dec (count vals))
+         from (take rs vals)
+         to (drop 1 vals)
+         tco (- 1 t)]
+      (map #(+ (* %1 tco) (* %2 t)) from to)))
 
+(defn interpolate
+   "Perform iterated linear interpolation on a vector of numbers using parameter t. Returns number."
+   [vals t]
+   (let [times (dec (count vals))]
+      (first (nth (iterate #(interpolate-1 % t) vals) times))))
+
+(defn ^Path2D de-casteljau
+   "Use De Casteljau's algorithm to approximate a Bézier curve (given as control Point2Ds) by line segments."
+   [points nseg]
+   (let [incr (/ 1 nseg)
+         path (Path2D$Double.)
+         [xs ys] (apply map vector (map de-pt points))
+         [ix0 iy0] (map first [xs ys])]
+      (.moveTo path ix0 iy0)
+      (loop [countdown (dec nseg)
+             t incr]
+         (.lineTo path (interpolate xs t) (interpolate ys t))
+         (when (pos? countdown)
+            (recur (dec countdown) (+ t incr))))
+      path))
+    
 (def ^Color control-sement-color Color/YELLOW)
 (def ^BasicStroke control-segment-stroke
    (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
