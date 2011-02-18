@@ -9,17 +9,15 @@
 (defn ^Path2D de-casteljau
    "Use De Casteljau's algorithm to approximate a Bézier curve (given as control Point2Ds) by line segments."
    [points nseg]
-   (let [incr (/ 1 nseg)
-         path (Path2D$Double.)
+   (let [path (Path2D$Double.)
          [xs ys] (apply map vector (map de-pt points))
          [ix0 iy0] (map first [xs ys])]
       (.moveTo path ix0 iy0)
-      (loop [countdown (dec nseg)
-             t incr];FIXME address error buildup by converting to a lazy seq with inner loops
-         (let [lin #(+ (* %1 (- 1 t)) (* %2 t))]
-            (.lineTo path (interpolate lin xs) (interpolate lin ys)))
-         (when (pos? countdown)
-            (recur (dec countdown) (+ t incr))))
+      (dotimes [i (inc nseg)]
+         (let [t (/ i nseg)
+               tco (- 1 t)
+               lin #(+ (* %1 tco) (* %2 t))]
+            (.lineTo path (interpolate lin xs) (interpolate lin ys))))
       path))
 
 (def ^Color control-sement-color Color/YELLOW)
