@@ -53,10 +53,16 @@
              (assoc-in0 (deref ref-val#) keys-val# mk-val#)))
        mk-val#))
 
-;-- Conventions --;
+(defn interpolate-1
+   "Perform a single interpolation on a sequence using binary function. Returns seq of smaller degree, where each result r_i is (binop d_i d_i+1)."
+   [binop vals]
+   (map binop (drop-last 1 vals) (drop 1 vals)))
 
-;;; Coordinates, points, and 2-vectors are represented as [x y] pairs.
-;;; All curve data is represented in standard Cartesian world coordinates.
+(defn interpolate
+   "Perform iterated linear interpolation on a sequence using a binary function. Returns final value."
+   [binop vals]
+   (first (nth (iterate #(interpolate-1 binop %) vals)
+               (dec (count vals)))))
 
 (defn de-dim
    "Read a Dimension object into a 2-vector of width, height."

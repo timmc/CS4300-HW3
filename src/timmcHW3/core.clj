@@ -13,7 +13,7 @@
       [java.awt Dimension Component
          Graphics2D RenderingHints Color BasicStroke]
       [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
-         Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
+         Line2D Line2D$Double Rectangle2D Rectangle2D$Double Ellipse2D Ellipse2D$Double]
       [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
     (:gen-class))
 
@@ -197,6 +197,32 @@
    [& args]
    (apply transform (.xform-from-view @view) args))
 
+(defn poly-len
+   "Calculate the line length of a polyline (2+ vertices) of Point2Ds."
+   [points]
+   (apply + (interpolate-1 #(.distance ^Point2D %1 ^Point2D %2) points)))
+
+(defn poly-bounds
+   "Calculate the bounding Rectangle2D of a polyline (1+ vertices) in its native coordinate frame."
+   [points]
+   (let [xs (map #(.getX %) points)
+         ys (map #(.getY %) points)
+         xmin (apply min xs)
+         xmax (apply max xs)
+         ymin (apply min ys)
+         ymax (apply max ys)]
+      (Rectangle2D$Double. xmin ymin (- xmax xmin) (- ymax ymin))))
+
+(defn poly-foldness
+   "Compute the degree to which a polyline (2+ vertices) is folded up in its bounding box."
+   [points]
+   (let [^Rectangle2D bounds (poly-bounds points)
+         epsilon 0.001]
+      1
+      #_(Math/sqrt (count points))
+      #_(/ (+ (poly-len points) epsilon)
+         (+ (.width bounds) (.height bounds) epsilon))))
+
 ;-- Rendering --;
 
 (defn test-draw-point
@@ -226,8 +252,9 @@
    (when (> (count points) 2)
       (.setColor g curve-pending-color)
       (.setStroke g curve-stroke)
-      (.draw g (.createTransformedShape (.xform-to-view @view)
-                                        (de-casteljau points 20))))) ; todo: calc appropriate number of interpolations
+      (let [samples (* (poly-foldness points) 30)]
+         (.draw g (.createTransformedShape (.xform-to-view @view)
+                                           (de-casteljau points samples))))))
     
 (defn render
    "Draw the world."
