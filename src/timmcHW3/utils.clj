@@ -12,14 +12,14 @@
    (if (seq ks)
       (apply update-in m ks f args)
       (apply f m args)))
-    
+
 (defn assoc-in0
    "A version of assoc-in that works with an empty collection of keys."
    [m ks v]
    (if (seq ks)
       (assoc-in m ks v)
       v))
-    
+
 ; Currently works just fine in Clojure, but is here for symmetry.
 (defn get-in0
    "A version of get-in that works with an empty collection of keys."
@@ -27,7 +27,7 @@
    (if (seq ks)
       (get-in m ks)
       m))
-    
+
 ;-- Utility --;
 
 (defn assoc-in-ref!
@@ -52,7 +52,7 @@
           (ref-set ref-val#
              (assoc-in0 (deref ref-val#) keys-val# mk-val#)))
        mk-val#))
-    
+
 ;-- Conventions --;
 
 ;;; Coordinates, points, and 2-vectors are represented as [x y] pairs.
@@ -62,10 +62,10 @@
    "Read a Dimension object into a 2-vector of width, height."
    [^Dimension d]
    [(.width d) (.height d)])
-    
+
 (defn de-pt
    "Read a Point2D$Double object into a 2-vector of x, y."
    [^Point2D$Double p]
    [(.getX p) (.getY p)])
-    
+
 

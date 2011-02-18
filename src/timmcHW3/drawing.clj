@@ -35,7 +35,7 @@
          (when (pos? countdown)
             (recur (dec countdown) (+ t incr))))
       path))
-    
+
 (def ^Color control-sement-color Color/YELLOW)
 (def ^BasicStroke control-segment-stroke
    (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))

@@ -1,43 +1,21 @@
 (ns timmcHW3.core
    "Core code. Use -main."
-   (:use timmcHW3.utils)
-   (:use timmcHW3.drawing)
+   (:use
+      [timmcHW3.utils]
+      [timmcHW3.drawing]
+      [timmcHW3.gui])
+   (:require timmcHW3.state)
+   (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
    (:import
-      [javax.swing SwingUtilities UIManager BoxLayout BorderFactory
-         JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem JButton JSpinner SpinnerNumberModel JSpinner$NumberEditor
-         KeyStroke]
-      [javax.swing.border Border EtchedBorder]
+      [javax.swing SwingUtilities UIManager
+         JFrame JComponent JPanel JMenuItem JCheckBoxMenuItem JButton JSpinner]
       [javax.swing.event ChangeListener]
-      [java.awt Dimension Component BorderLayout
+      [java.awt Dimension Component
          Graphics2D RenderingHints Color BasicStroke]
       [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
          Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]
       [java.awt.event ActionListener ComponentAdapter MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
     (:gen-class))
-
-(defrecord ^{:doc "GUI components."}
-   GUI
-   [^{:doc "Application window." :tag JFrame}
-     frame
-    ^{:doc "Toolbox buttons." :tag JPanel}
-     controls
-    ^{:doc "Drawing canvas." :tag JComponent}
-     canvas
-    ^{:doc "Application menubar." :tag JMenuBar}
-     menu
-    ^{:doc "Undo menu item." :tag JMenuItem}
-     mi-undo
-    ^{:doc "Redo menu item." :tag JMenuItem}
-     mi-redo
-    ^{:doc "Exit menu item." :tag JMenuItem}
-     mi-exit
-    ^{:doc "View control polygon toggle button." :tag JCheckBoxMenuItem}
-     mi-view-control
-    ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
-     spinner-rot
-    ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
-     spinner-zoom
-    ])
 
 (def ^{:doc "The viewpoint's state."} gui (ref nil))
 
@@ -45,24 +23,6 @@
    (dosync (ref-set gui (GUI. nil nil nil nil nil nil nil nil nil nil))))
 
 ;-- Viewpoint --;
-
-(defrecord ^{:doc "Viewport state."}
-   Viewpoint
-   [^{:doc "Chosen center of rotation."}
-     rot-center ; Translation: User drags new world point to center of window.
-    ^{:doc "Minimum extent of world to show in both width and height."}
-     view-minspect ; Scale: Resizing the window stretches the view.
-    ^{:doc "Rotation of viewport."}
-     view-rot ; Rotation: Around the center of the window.
-    ^{:doc "Viewport's pixel center coordinates as Point2D."}
-     view-center ; Centering: This is the center of rotation of the viewpoint.
-    ^{:doc "World-to-viewport transform." :tag AffineTransform}
-     xform-to-view
-    ^{:doc "The inverse transform, viewport-to-world." :tag AffineTransform}
-     xform-from-view
-    ^{:doc "Dimensions of viewport." :tag Dimension}
-     viewport-dim
-   ])
 
 (def default-rot-center [0 0])
 (def default-view-minspect 100)
@@ -142,32 +102,12 @@
 
 ;-- State --;
 
-;;; Modes:
-; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
-; :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
-; :manipulate - Allow dragging of vertices.
-
-(defrecord ^{:doc "Whole-program state."}
-   ProgState
-   [mode ; overall mode, explained above
-    posing? ; true if in the Pose minor mode
-    dragging? ; true if something is being dragged
-   ])
-
 (def ^{:doc "Global pointer to current state."} state (ref nil))
 
 (defn init-state []
    (dosync (ref-set state (ProgState. :extend0 false false))))
 
 ;-- Data --;
-
-(defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
-   UserData
-   [act ; The act that produced this state, e.g. "vertex drag" or empty string.
-    curves ; Vector of cubic Bézier curves, each of which is a list of 4+ Point2Ds.
-    pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
-    saved-mode ; ProgState.mode that was active when this state was *first* saved off.
-   ])
 
 (def ^{:doc "User data that needs undo/redo."} udata (ref nil))
 
@@ -382,103 +322,13 @@
 
 ;-- Components --;
 
-; We define these in functions so they are not created at compile-time.
-
-(defn ^JMenuItem new-mi-undo
-   [rgui]
-   (doto (JMenuItem. "Undo")
-      (.setEnabled false)
-      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
-
-(defn ^JMenuItem new-mi-redo
-   [rgui]
-   (doto (JMenuItem. "Redo")
-      (.setEnabled false)
-      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
-
-(defn ^JMenuItem new-mi-exit
-   [rgui]
-   (doto (JMenuItem. "Exit")
-      (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
-
-(defn ^JCheckBoxMenuItem new-mi-view-control
-   [rgui]
-   (JCheckBoxMenuItem. "Show control polygon" true))    
-
-(defn ^JMenuBar new-menu
-   "Make a menu bar."
-   [rgui]
-   (doto (JMenuBar.)
-      (.setEnabled false)
-      (.add (doto (JMenu. "Spline")
-               (.add (create! rgui [:mi-undo] new-mi-undo rgui))
-               (.add (create! rgui [:mi-redo] new-mi-redo rgui))
-               (.add (create! rgui [:mi-exit] new-mi-exit rgui))))
-      (.add (doto (JMenu. "View")
-               (.add (create! rgui [:mi-view-control] new-mi-view-control rgui))))))
-
-(defn ^Border make-controls-border
-   [title]
-   (-> (BorderFactory/createEtchedBorder EtchedBorder/LOWERED)
-       (BorderFactory/createTitledBorder title)
-       (BorderFactory/createCompoundBorder (BorderFactory/createEmptyBorder 4 4 4 4))))
-
-(defn ^Component make-vertical-layout
-   "Lay out a series of components as a vertical stack with an expanding south. Not tail-recursive."
-   [c & more]
-   (let [cont (JPanel.)]
-      (.setLayout cont (BorderLayout.))
-      (.add cont c BorderLayout/NORTH)
-      (when (seq more)
-         (.add cont (apply make-vertical-layout more) BorderLayout/CENTER))
-      cont))
-
-(defn ^JSpinner new-pose-rotate
-   "Make the spinner for viewpoint rotation."
-   [rgui]
-   (let [nm (SpinnerNumberModel. default-view-rot nil nil 0.03) ; radians!
-         js (JSpinner. nm)
-         ned (JSpinner$NumberEditor. js "#####0.000")]
-      (-> ned (.getTextField) (.setColumns 5))
-      (.setEditor js ned)
-      js))
-
-(defn ^JSpinner new-pose-zoom
-   "Make the spinner for viewpoint zooming."
-   [rgui]
-   (let [nm (SpinnerNumberModel. (minspect-to-zoom default-view-minspect) 0.001 20.0 0.003) ; log scale, higher is greater mag
-         js (JSpinner. nm)
-         ned (JSpinner$NumberEditor. js "#####0.000")]
-      (-> ned (.getTextField) (.setColumns 5))
-      (.setEditor js ned)
-      js))
-
-(defn ^JPanel new-pose-panel
-   "Make a Pose panel."
-   [rgui]
-   (let [p (JPanel.)]
-      (doto p
-         (.setBorder (make-controls-border "Position"))
-         (.add (create! rgui [:spinner-rot] new-pose-rotate rgui))
-         (.add (create! rgui [:spinner-zoom] new-pose-zoom rgui)))))
-
-(defn ^JPanel new-controls
-   "Make a control panel."
-   [rgui]
-   (let [p (JPanel.)]
-      (doto p
-         (.add (make-vertical-layout
-                  (new-pose-panel rgui))))))
-
-(defn ^JComponent new-canvas
-   "Make a drawing canvas."
-   [rgui]
-   (let [jc (proxy [JComponent] []
-               (paint [^Graphics2D g] (render g)))]
-      (doto jc
-         (.setDoubleBuffered true)
-         (.setMinimumSize (Dimension. 10 10))
-         (.setPreferredSize (Dimension. 600 600)))))
+(defn reflect-view!
+   "Reflect view state into GUI."
+   [rview rgui]
+   (doto (.spinner-zoom @rgui)
+      (.setValue (minspect-to-zoom (.view-minspect @rview))))
+   (doto (.spinner-rot @rgui)
+      (.setValue (.view-rot @rview))))
 
 (defn enliven!
    "Add action listeners to GUI components."
@@ -503,9 +353,6 @@
          (proxy [ActionListener] []
             (actionPerformed [_]
                (do-maybe-exit)))))
-   (doto (.menu @rgui)
-      (.setEnabled true))
-   ; done with menus
    (doto (.spinner-rot @rgui)
       (.addChangeListener
          (proxy [ChangeListener] []
@@ -534,18 +381,6 @@
                (update-canvas-depends!)
                (ask-redraw))))))
 
-(defn ^JFrame new-frame
-   "Make the application window."
-   [rgui]
-   (let [fr (JFrame. "CS4300 HW3 - TimMc")]
-      (doto fr
-         (.setDefaultCloseOperation JFrame/DISPOSE_ON_CLOSE)
-         (.setJMenuBar (create! rgui [:menu] new-menu rgui))
-         (.setLayout (BorderLayout.))
-         (.add (create! rgui [:controls] new-controls rgui) BorderLayout/LINE_START)
-         (.add (create! rgui [:canvas] new-canvas rgui) BorderLayout/CENTER)
-         (.pack))))
-
 ;-- Setup --;
 
 (defn launch
@@ -553,10 +388,11 @@
    []
    (init-state)
    (init-gui)
-   (let [frame (create! gui [:frame] new-frame gui)]
+   (let [frame (create! gui [:frame] new-frame gui render)]
       (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
       (init-view)
       (init-udata)
+      (reflect-view! view gui)
       (update-canvas-depends!)
       (enliven! gui)
       (.setVisible frame true)))
