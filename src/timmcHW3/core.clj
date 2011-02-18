@@ -216,12 +216,13 @@
 (defn poly-foldness
    "Compute the degree to which a polyline (2+ vertices) is folded up in its bounding box."
    [points]
+   #_1 ; constant factor does not work -- gets choppy with >10 vertices
+   #_(Math/sqrt (count points)) ; gets choppy a bit more slowly
    (let [^Rectangle2D bounds (poly-bounds points)
-         epsilon 0.001]
-      1
-      #_(Math/sqrt (count points))
-      #_(/ (+ (poly-len points) epsilon)
-         (+ (.width bounds) (.height bounds) epsilon))))
+         epsilon 0.001] ; a small value is added to prevent div by zero
+      (/ (poly-len points)
+         (+ (.width bounds) (.height bounds) epsilon)) ; much better, though should be used with a higher multiplier
+      ))
 
 ;-- Rendering --;
 
@@ -252,7 +253,10 @@
    (when (> (count points) 2)
       (.setColor g curve-pending-color)
       (.setStroke g curve-stroke)
-      (let [samples (* (poly-foldness points) 30)]
+      (let [smin 20
+            smax 200
+            smult 40
+            samples (max smin (min smax (int (* (poly-foldness points) smult))))]
          (.draw g (.createTransformedShape (.xform-to-view @view)
                                            (de-casteljau points samples))))))
     
