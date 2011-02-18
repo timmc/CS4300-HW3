@@ -29,8 +29,8 @@
      mi-undo
     ^{:doc "Redo menu item." :tag JMenuItem}
      mi-redo
-    ^{:doc "Pose mode toggle button." :tag JCheckBoxMenuItem}
-     mi-pose
+    ^{:doc "View control polygon toggle button." :tag JCheckBoxMenuItem}
+     mi-view-control
     ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
      spinner-rot
     ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
@@ -278,8 +278,9 @@
 (defn draw-pending
    "Draw a potentially incomplete curve."
    [^Graphics2D g, points]
-   (draw-control-segments g (map loc-to-view points))
-   (draw-control-points g (map loc-to-view points))   
+   (when (.getState (.mi-view-control @gui))
+      (draw-control-segments g (map loc-to-view points))
+      (draw-control-points g (map loc-to-view points)))
    (when (> (count points) 2)
       (.setColor g curve-pending-color)
       (.setStroke g curve-stroke)
@@ -294,14 +295,7 @@
       (doto g
          (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
          (.setColor (Color. 50 50 50))
-         (.fill (Rectangle2D$Double. 0 0 w h))
-         (.setColor Color/YELLOW)
-         (.draw (Rectangle2D$Double. cx 0 0.1 h))
-         (.draw (Rectangle2D$Double. 0 cy w 0.1))))
-   (test-draw-point g Color/WHITE 0 0) ; center
-   (test-draw-point g Color/GREEN -20 0) ; left
-   (test-draw-point g Color/RED 20 0) ; right
-   (test-draw-point g Color/BLUE 0 20) ; up
+         (.fill (Rectangle2D$Double. 0 0 w h))))
    (draw-spline g)
    (draw-pending g (.pending-points @udata)))
 
@@ -413,13 +407,13 @@
                (do-maybe-exit))))
       (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
 
-(defn ^JCheckBoxMenuItem new-mi-pose
+(defn ^JCheckBoxMenuItem new-mi-view-control
    []
-   (doto (JCheckBoxMenuItem. "Position" (.posing? @state))
+   (doto (JCheckBoxMenuItem. "Show control polygon" true)
       (.addActionListener
          (proxy [ActionListener] []
             (actionPerformed [_]
-               (do-mode-position))))))
+               (ask-redraw))))))
 
 (defn ^JMenuBar new-menu
    "Make a menu bar."
@@ -429,8 +423,8 @@
                (.add (create! gui [:mi-undo] new-mi-undo))
                (.add (create! gui [:mi-redo] new-mi-redo))
                (.add (new-mi-exit))))
-      (.add (doto (JMenu. "Mode")
-               (.add (create! gui [:mi-pose] new-mi-pose))))))
+      (.add (doto (JMenu. "View")
+               (.add (create! gui [:mi-view-control] new-mi-view-control))))))
 
 (defn ^Border make-controls-border
    [title]
