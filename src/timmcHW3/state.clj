@@ -59,16 +59,16 @@
    []
    (Viewpoint. nil nil nil nil nil nil nil))
 
-;;; Modes:
-; :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
-; :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
-; :manipulate - Allow dragging of vertices.
-
 (defrecord ^{:doc "Whole-program state."}
    ProgState
-   [mode ; overall mode, explained above
-    splitting? ; true if Split is active
-   ])
+   [^{:doc "Overall mode:
+            :extend0 - Wait for sufficient input to define new curve. Allow vertex input.
+            :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
+            :manipulate - Allow dragging of vertices."}
+    mode
+    ^{:doc "True if splitting is active."}
+    splitting?
+    ])
 
 (defn ^ProgState make-blank-ProgState
    []
@@ -76,13 +76,13 @@
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
    UserData
-   [act ; The act that produced this state, e.g. "vertex drag" or empty string.
-    curves ; Vector of cubic Bézier curves, each of which is a list of 4+ Point2Ds.
-    pending-points ; Vector of Point2Ds that have not been incorporated into a curve yet.
-    saved-mode ; ProgState.mode that was active when this state was *first* saved off.
+   [^{:doc "The act that produced this state, e.g. \"vertex drag\" or empty string."}
+    act
+    ^{:doc "Vector of Bézier curve control vertices Possibly empty."}
+    curve
    ])
 
 (defn ^UserData make-blank-UserData
    []
-   (UserData. "Initialization" [] [] :extend0))
+   (UserData. "Initialization" []))
 

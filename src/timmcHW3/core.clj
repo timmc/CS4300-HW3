@@ -88,10 +88,13 @@
 
 ;-- State --;
 
-(def add-pending-point ^{:actname "add vertex" :doc "Add a pending point to the world."}
+(def ^{:doc "Add a vertex to the curve."}
+   append-vertex!
+   ^{:actname "add vertex"}
    (fn [^Point2D wp]
-       (let [new-pend (conj (:pending-points @udata) wp)]
-          (assoc-in-ref! udata [:pending-points] new-pend))))
+      (dosync
+         (assoc-in-ref! udata [:curve]
+            (conj (.curve @udata) wp)))))
 
 ;-- History --;
 
@@ -130,7 +133,7 @@
    "Call ref-updating f (no other side effects) with arguments. Uses :actname metadata found on f to add to undo buffer."
    [f & args]
    (dosync
-      (let [old-state (assoc @udata :saved-mode (.mode @state))]
+      (let [old-state @udata] ; leave line here so that we can assoc any saved state onto it
          (apply f args) ; change @udata
          (let [new-state (assoc @udata :act (:actname (meta f)))]
             (ref-set data-past (conj @data-past old-state))
@@ -208,24 +211,18 @@
          (.setPaint c)
          (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
 
-(def ^Color curve-pending-color Color/RED)
-(def ^Color spline-color Color/RED)
+(def ^Color curve-color Color/RED)
 (def ^BasicStroke curve-stroke
    (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
 
-(defn draw-spline
-   "Draw the main user spline"
-   [^Graphics2D g]
-   (comment "TODO"))
-
-(defn draw-pending
+(defn draw-curve
    "Draw a potentially incomplete curve."
    [^Graphics2D g, points]
    (when (.getState (.mi-view-control @gui))
       (draw-control-segments g (map loc-to-view points))
       (draw-control-points g (map loc-to-view points)))
    (when (> (count points) 2)
-      (.setColor g curve-pending-color)
+      (.setColor g curve-color)
       (.setStroke g curve-stroke)
       (let [smin 20
             smax 200
@@ -243,8 +240,7 @@
          (.setRenderingHint RenderingHints/KEY_ANTIALIASING RenderingHints/VALUE_ANTIALIAS_ON)
          (.setColor (Color. 50 50 50))
          (.fill (Rectangle2D$Double. 0 0 w h))))
-   (draw-spline g)
-   (draw-pending g (.pending-points @udata)))
+   (draw-curve g (.curve @udata)))
 
 ;=====;
 ; GUI ;
@@ -258,14 +254,16 @@
 (defn update-mode!
    "Determine mode from user data state."
    []
-   false ;TODO
-   )
+   (dosync
+      (assoc-in-ref! state [:mode]
+         (if (< (count (.curve @udata)) 4)
+            :extend0
+            :extend1))))
 
 (defn reflect-mode!
    "Update mode-dependent GUI elements."
    []
-   false ;TODO
-   )
+   (.setEnabled (.split @gui) (not= (.mode @state) :extend0)))
 
 ;-- Event handlers --;
 
@@ -284,7 +282,8 @@
       (dosync
          (when (has-history? from)
             (slide-history! from to)
-            (assoc-in-ref! state [:mode] (.saved-mode @udata))))
+            ;restore any saved-off state from inside udata
+            (update-mode!)))
       (ask-redraw)
       (reflect-history-state!)
       (reflect-mode!))) ; TODO reset temporary state like ProgState.posing?
@@ -311,7 +310,7 @@
                  (not (.splitting? @state))
                  (.getState (.mi-view-control @gui))
                  (not= (.mode @state) :manipulate))
-         (act! add-pending-point (loc-from-view (.getX e) (.getY e)))
+         (act! append-vertex! (loc-from-view (.getX e) (.getY e)))
          (update-mode!)
          (ask-redraw)
          (reflect-mode!))))
@@ -401,7 +400,9 @@
                   {:rot-center default-rot-center
                    :view-minspect default-view-minspect
                    :view-rot default-view-rot}))
-         (ref-set udata (make-blank-UserData)))
+         (ref-set udata (make-blank-UserData))
+         (update-mode!))
+      (reflect-mode!)
       (reflect-view! view gui)
       (update-canvas-depends!)
       (enliven! gui)
