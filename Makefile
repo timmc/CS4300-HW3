@@ -11,9 +11,9 @@ run:
 	lein run
 
 todo:
-	grep 'TODO' -R */ || true
-	grep 'FIXME' -R */ || true
-	grep 'XXX' -R */ || true
+	grep 'TODO' -nR */ || true
+	grep 'FIXME' -nR */ || true
+	grep 'XXX' -nR */ || true
 
 clean: pkg-clean
 
