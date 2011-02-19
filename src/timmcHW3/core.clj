@@ -265,6 +265,11 @@
    []
    (.setEnabled (.split @gui) (not= (.mode @state) :extend0)))
 
+(defn cancel-active-command!
+   "Cancel any in-progress commands and temporary state."
+   []
+   (assoc-in-ref! state [:splitting?] false))
+
 ;-- Event handlers --;
 
 (defn slide-history!
@@ -274,13 +279,14 @@
       (ref-set to (conj @to @udata))
       (ref-set udata (first @from))
       (ref-set from (rest @from))))
-   
+
 (defn do-history!
    [undo?]
    (let [from (if undo? data-past data-future)
          to (if undo? data-future data-past)]
       (dosync
          (when (has-history? from)
+            (cancel-active-command!)
             (slide-history! from to)
             ;restore any saved-off state from inside udata
             (update-mode!)))
