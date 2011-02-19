@@ -201,6 +201,23 @@
          (+ (.width bounds) (.height bounds) epsilon)) ; much better, though should be used with a higher multiplier
       ))
 
+(def ^{:doc "Radius (in view) for picking a point."} pick-radius 3)
+
+(defn pick-vertex?
+   "Determine if the (view) cursor is within a square picking radius of a (view) vertex."
+   ([vx, vy, ^Point2D vvertex]
+    (and (<= (Math/abs (- (.getX vvertex) vx)) pick-radius)
+         (<= (Math/abs (- (.getY vvertex) vy)) pick-radius))))
+
+(defn check-hover!
+   "Check which vertex is hovered. Return (boolean) whether this has changed."
+   []
+   (dosync
+      (let [curX (.mouseX @state)
+            curY (.mouseY @state)
+            hovered (first (filter #(pick-vertex? curX curY (loc-to-view %)) (.curve @udata)))]
+         (assoc-in-ref! state [:hovered] hovered))))
+
 ;-- Rendering --;
 
 (defn test-draw-point
@@ -217,20 +234,20 @@
 
 (defn draw-curve
    "Draw a potentially incomplete curve."
-   [^Graphics2D g, points]
+   [^Graphics2D g, wpoints]
    (when (.getState (.mi-view-control @gui))
-      (draw-control-segments g (map loc-to-view points))
-      (draw-control-points g (map loc-to-view points)))
-   (when (> (count points) 2)
+      (draw-control-segments g (map loc-to-view wpoints))
+      (draw-control-points g wpoints (.xform-to-view @view) (.hovered @state)))
+   (when (> (count wpoints) 2)
       (.setColor g curve-color)
       (.setStroke g curve-stroke)
       (let [smin 20
             smax 200
             smult 40
-            samples (max smin (min smax (int (* (poly-foldness points) smult))))]
+            samples (max smin (min smax (int (* (poly-foldness wpoints) smult))))]
          (.draw g (.createTransformedShape (.xform-to-view @view)
-                                           (de-casteljau points samples))))))
-    
+                                           (de-casteljau wpoints samples))))))
+
 (defn render
    "Draw the world."
    [^Graphics2D g]
@@ -292,17 +309,12 @@
             (update-mode!)))
       (ask-redraw)
       (reflect-history-state!)
-      (reflect-mode!))) ; TODO reset temporary state like ProgState.posing?
+      (reflect-mode!)))
 
 (defn do-maybe-exit
    "Exit, or possible ask user to save data first."
    []
    (.dispose (.frame @gui)))
-
-(defn do-mode-position
-   "Update state.posing? if allowed."
-   []
-   (assoc-in-ref! state [:posing?] (.getState (.mi-pose @gui))))
 
 ;-- Event interpretation --;
 
@@ -321,9 +333,28 @@
          (ask-redraw)
          (reflect-mode!))))
 
+(defn canvas-mouse-move
+   [^MouseEvent e]
+   (dosync
+      (assoc-in-ref! state [:mouseX] (.getX e))
+      (assoc-in-ref! state [:mouseY] (.getY e))
+      (when (check-hover!)
+         (ask-redraw)))
+   (when (.splitting? @state)
+      ;TODO picking for Split
+   ))
+
 (defn canvas-drag
-   [^MouseMoveEvent e]
-   );TODO
+   [^MouseEvent e]
+   )
+
+(defn canvas-mouse-exited
+   []
+   (dosync
+      (assoc-in-ref! state [:mouseX] -1)
+      (assoc-in-ref! state [:mouseY] -1)
+      (when (assoc-in-ref! state [:hovered] nil)
+         (ask-redraw))))
 
 (defn canvas-scroll
    [^MouseWheelEvent e]
@@ -374,21 +405,21 @@
             (stateChanged [_]
                (update-pose!)
                (ask-redraw)))))
-   (doto (.canvas @rgui)
-      (.addMouseListener
-         (proxy [MouseAdapter] []
-            (mouseClicked [e] (canvas-click e))))
-      (.addMouseMotionListener
-         (proxy [MouseMotionAdapter] []
-            (mouseDragged [e] (canvas-drag e))))
-      (.addMouseWheelListener
-         (proxy [MouseWheelListener] []
-            (mouseWheelMoved [e] (canvas-scroll e))))
-      (.addComponentListener
-         (proxy [ComponentAdapter] []
-            (componentResized [_]
-               (update-canvas-depends!)
-               (ask-redraw))))))
+   (let [mouse (proxy [MouseAdapter] []
+                  (mouseClicked [e] (canvas-click e))
+                  (mouseDragged [e] (canvas-drag e))
+                  (mouseExited [_] (canvas-mouse-exited))
+                  (mouseMoved [e] (canvas-mouse-move e))
+                  (mouseWheelMoved [e] (canvas-scroll e)))]
+      (doto (.canvas @rgui)
+         (.addMouseListener mouse)
+         (.addMouseMotionListener mouse)
+         (.addMouseWheelListener mouse)
+         (.addComponentListener
+            (proxy [ComponentAdapter] []
+               (componentResized [_]
+                  (update-canvas-depends!)
+                  (ask-redraw)))))))
 
 ;-- Setup --;
 
@@ -419,4 +450,4 @@
    [& args]
    (SwingUtilities/invokeLater launch))
 
-;TODO: Add action listeners after interface is entirely set up?
+;TODO: Use *-dirty? refs and chain their setting.

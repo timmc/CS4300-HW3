@@ -36,13 +36,15 @@
             (.draw g (Line2D$Double. prev cur))
             (recur cur (next remain))))))
 
-(def ^Color control-point-color Color/GREEN)
+(def ^Color vertex-color Color/GREEN)
+(def ^Color picked-color Color/WHITE)
 
 (defn draw-control-points
-   "Draw vertices of a control polygon. Specified in view coordinates."
-   [^Graphics2D g, vpoints]
-   (doseq [p vpoints]
-      (let [[vcx vcy] (de-pt p)]
-         (.setColor g control-point-color)
+   "Draw vertices of a control polygon. Specified in world coordinates."
+   [^Graphics2D g, wpoints, ^AffineTransform to-view, ^Point2D picked]
+   (doseq [p wpoints]
+      (let [[vcx vcy] (de-pt (.transform to-view p nil))
+            color (if (identical? p picked) picked-color vertex-color)]
+         (.setColor g color)
          (.fill g (Ellipse2D$Double. (- vcx 3) (- vcy 3) 6 6)))))
 

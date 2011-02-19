@@ -68,11 +68,17 @@
     mode
     ^{:doc "True if splitting is active."}
     splitting?
+    ^{:doc "Last mouse X position in view"}
+    mouseX
+    ^{:doc "Last mouse Y position in view"}
+    mouseY
+    ^{:doc "World-vertex (identical) that cursor is hovering over, or nil."}
+    hovered
     ])
 
 (defn ^ProgState make-blank-ProgState
    []
-   (ProgState. :extend0 false))
+   (ProgState. :extend0 false -1 -1 nil))
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
    UserData

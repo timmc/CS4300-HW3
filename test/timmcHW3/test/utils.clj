@@ -1,7 +1,6 @@
 (ns timmcHW3.test.utils
    (:use [timmcHW3.utils] :reload)
-   (:use [clojure.test])
-   (:import [java.awt.geom Point2D$Double]))
+   (:use [clojure.test]))
 
 
 (deftest complete-update
