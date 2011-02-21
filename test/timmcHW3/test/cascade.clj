@@ -39,7 +39,7 @@
 	  :mode #() [:udata]
 	  :toolstate #() [:mode]))
 
-(deftest find-deps
+(deftest find-dependants
   (is (= (dependants-1 sample :udata) #{:painting :mode}))
   (is (= (dependants   sample :udata) #{:painting :mode :toolstate}))
   (is (empty? (dependants sample :toolstate))))
