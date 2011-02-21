@@ -4,10 +4,10 @@
    State update dependencies are modeled as a directed acyclic graph of nodes
    that can be clean or dirty, where setting a node as dirty turns the nodes
    at all outedges dirty recursively.
-   Each node is associated with a \"cleaner\" function intended to update
-   that aspect of the relying program's state. When a dependant node needs
-   to be marked clean, it cleans all of its own dependencies and then calls
-   its own cleaner function. There is no strict guarantee that a node's
+   Each node is associated with an optional \"cleaner\" function intended to
+   update that aspect of the relying program's state. When a dependant node
+   needs to be marked clean, it cleans all of its own dependencies and then
+   calls its own cleaner function. There is no strict guarantee that a node's
    cleaner will not be called multiple times in case of a diamond in the
    graph, so cleaners must be idempotent. (However, the cleanup algorithm
    does try to avoid this scenario as a performance measure.)
@@ -39,7 +39,7 @@
    and either a list of dependencies or the current cleanliness state.
    The dependency nodes must already exist, and the new node must not.
    The cleaner is expected to be a nullary function and will only be called
-   when the dependencies are clean.
+   when the dependencies are clean. nil is accepted for this value.
    If there are no dependencies, the initial boolean state must be given instead.
    Otherwise, initial state is computed by conjunction of the states of
    dependent nodes."
@@ -130,21 +130,26 @@
   [cascade & nodes]
   (dirty-set cascade (into #{} nodes)))
 
-(defn to-clean
-  "Return {:fns <coll<fn>> :nodes <set<keyword>>} where :fns is the sequence of
-   nullary functions that must be successfully called to clean the node and
-   its dependencies, and :nodes is the set of nodes that will be changed."
+(defn- to-clean*
+  "Recursive portion of to-clean -- expect nils and duplicates in fn list."
   [c n]
   (if (clean? c n)
     {:fns [] :nodes #{}}
     (let [dirty-parents (filter (complement (partial clean? c))
 				(dependencies-1 c n))
-	  parcleans (map (partial to-clean c) dirty-parents)
+	  parcleans (map (partial to-clean* c) dirty-parents)
 	  pfns (map :fns parcleans)
 	  pnodes (map :nodes parcleans)]
-      {:fns (concat (distinct (apply concat pfns))
-		    [(cleaner c n)])
+      {:fns (concat (apply concat pfns) [(cleaner c n)])
        :nodes (conj (apply set/union pnodes) n)})))
+
+(defn to-clean
+  "Return {:fns <coll<fn>> :nodes <set<keyword>>} where :fns is the sequence of
+   nullary functions that must be successfully called to clean the node and
+   its dependencies, and :nodes is the set of nodes that will be changed."
+  [c n]
+  (update-in (to-clean* c n) [:fns]
+	     #(filter (complement nil?) (distinct %))))
 
 (defn clean
   "Run all cleaners necessary to get the specified node clean,
