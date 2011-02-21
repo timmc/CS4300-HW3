@@ -39,6 +39,16 @@
 	  :mode #() [:udata]
 	  :toolstate #() [:mode]))
 
+(deftest get-cleaner
+  (let [updater #()
+	basic (create :foo updater false)]
+    (is (= (cleaner basic :foo) updater))))
+
+(deftest find-dependencies
+  (is (= (dependencies-1 sample :udata) #{}))
+  (is (= (dependencies-1 sample :painting) #{:udata :hover :xform}))
+  (is (= (dependencies   sample :painting) #{:udata :hover :xform :pose :dim})))
+
 (deftest find-dependants
   (is (= (dependants-1 sample :udata) #{:painting :mode}))
   (is (= (dependants   sample :udata) #{:painting :mode :toolstate}))
@@ -55,4 +65,26 @@
     (is (= (clean? d-udata :mode) false))
     (is (= (clean? d-udata :toolstate) false))
     (is (= (clean? d-udata :xform) true))))
+
+(def l0 (ref 0))
+(def l1 (ref 0))
+(def l3 (ref 0))
+(def l0! (fn [] (dosync (ref-set l0 (inc @l0)))))
+(def l1! (fn [] (dosync (ref-set l1 (inc @l1)))))
+(def l3! (fn [] (dosync (ref-set l3 (inc @l3)))))
+(def diamond (dirty (create :l0 l0! true
+			    :l1 l1! [:l0]
+			    :l2a #() [:l1]
+			    :l2b #() [:l1]
+			    :l3 l3! [:l2a :l2b])
+		    :l1))
+
+(deftest cleaning-list
+  (let [{dfns :fns dnodes :nodes} (to-clean diamond :l3)]
+    (is (= (count dfns) 4))
+    (is (not (some #(= % l0!) dfns)))
+    (is (some #(= % l1!) dfns))
+    (is (some #(= % l3!) dfns))
+    (is (distinct? dfns))
+    (is (not (contains? dnodes :l0)))))
 

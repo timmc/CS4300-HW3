@@ -55,6 +55,22 @@
      (throw (IllegalArgumentException. "Must provide triplets of arguments to cascade creator.")))
   (reduce #(apply add %1 %2) {} (partition 3 adds)))
 
+(defn cleaner
+  "Get the thunk that will be called to clean this node's program state."
+  [cascade node-kw]
+  (-> cascade node-kw :cleaner))
+
+(defn dependencies-1
+  "Return the set of node keywords that this node depends immediately upon."
+  [cascade node-kw]
+  (-> cascade node-kw :deps))
+
+(defn dependencies
+  "Return the full set of node keywords that this node depends upon."
+  [cascade node-kw]
+  (apply set/union (for [d (dependencies-1 cascade node-kw)]
+		     (conj (dependencies cascade d) d))))
+
 (defn set-all
   "Set all nodes to the given state (true = clean)."
   [cascade state]
@@ -101,4 +117,22 @@
   [cascade & nodes]
   (dirty-set cascade (into #{} nodes)))
 
+(defn to-clean
+  "Return {:fns <coll<fn>> :nodes <set<keyword>>} where :fns is the sequence of
+   nullary functions that must be successfully called to clean the node and
+   its dependencies, and :nodes is the set of nodes that will be changed."
+  [c n]
+  (if (clean? c n)
+    {:fns [] :nodes #{}}
+    (let [dirty-parents (filter (complement (partial clean? c))
+				(dependencies-1 c n))
+	  parcleans (map (partial to-clean c) dirty-parents)
+	  pfns (map :fns parcleans)
+	  pnodes (map :nodes parcleans)]
+      {:fns (concat (distinct (apply concat pfns))
+		    [(cleaner c n)])
+       :nodes (conj (apply set/union pnodes) n)})))
+
+;;;TODO: cleanup by returning a list of thunks and a cascade that will
+;;;represent true node states after the thunks are all successfully run.
 
