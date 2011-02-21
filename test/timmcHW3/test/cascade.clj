@@ -86,5 +86,18 @@
     (is (some #(= % l1!) dfns))
     (is (some #(= % l3!) dfns))
     (is (distinct? dfns))
+    (is (= (count dnodes) 4))
     (is (not (contains? dnodes :l0)))))
+
+(deftest total-cleanup
+  (dosync
+   (ref-set l0 0)
+   (ref-set l1 0)
+   (ref-set l3 0)
+   (let [result (cleanup diamond :l3)]
+     (is (= @l0 0))
+     (is (= @l1 1)) ; For performance. (Cleaners should be repeatable.)
+     (is (= @l3 1))
+     (is (clean? result :l3))
+     (is (clean? result :l1)))))
 

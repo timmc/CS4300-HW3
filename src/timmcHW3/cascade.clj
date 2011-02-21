@@ -133,6 +133,12 @@
 		    [(cleaner c n)])
        :nodes (conj (apply set/union pnodes) n)})))
 
-;;;TODO: cleanup by returning a list of thunks and a cascade that will
-;;;represent true node states after the thunks are all successfully run.
+(defn cleanup
+  "Run all cleaners necessary to get the specified node clean,
+   and return updated cascade."
+  [cascade node-kw]
+  (let [{thunks :fns affected :nodes} (to-clean cascade node-kw)
+	success (reduce #(set-single %1 %2 true) cascade affected)]
+    (doseq [t thunks] (t))
+    success))
 
