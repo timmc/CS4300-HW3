@@ -1,29 +1,29 @@
 (ns timmcHW3.test.cascade
-   (:use [timmcHW3.cascade] :reload)
-   (:use [clojure.test]))
+  (:use [timmcHW3.cascade] :reload)
+  (:use [clojure.test]))
 
 (deftest empty-create
-   (is (empty? (create))))
+  (is (empty? (create))))
 
 (deftest explicit-state
-   (is (= (clean? (create :foo #() true) :foo) true))
-   (is (= (clean? (create :foo #() false) :foo) false)))
+  (is (= (clean? (create :foo #() true) :foo) true))
+  (is (= (clean? (create :foo #() false) :foo) false)))
 
 (def trimix
-   (create :foo #() true
-           :bar #() false
-           :baz #() true
-           :qux #() [:foo :bar :baz]))
+  (create :foo #() true
+	  :bar #() false
+	  :baz #() true
+	  :qux #() [:foo :bar :baz]))
 
 (deftest create-and-test
-   (is (= (clean? trimix :foo) true))
-   (is (= (clean? trimix :bar) false))
-   (is (= (clean? trimix :baz) true))
-   (is (= (clean? trimix :qux) false)))
+  (is (= (clean? trimix :foo) true))
+  (is (= (clean? trimix :bar) false))
+  (is (= (clean? trimix :baz) true))
+  (is (= (clean? trimix :qux) false)))
 
 (deftest infer-state
-   (is (= (clean? (create :foo #() true :bar #() [:foo]) :bar) true))
-   (is (= (clean? (create :foo #() false :bar #() [:foo]) :bar) false)))
+  (is (= (clean? (create :foo #() true :bar #() [:foo]) :bar) true))
+  (is (= (clean? (create :foo #() false :bar #() [:foo]) :bar) false)))
 
 (deftest basic-setall
   (is (= (clean? (set-all trimix true) :bar) true))
@@ -94,7 +94,7 @@
    (ref-set l0 0)
    (ref-set l1 0)
    (ref-set l3 0)
-   (let [result (cleanup diamond :l3)]
+   (let [result (clean diamond :l3)]
      (is (= @l0 0))
      (is (= @l1 1)) ; For performance. (Cleaners should be repeatable.)
      (is (= @l3 1))
