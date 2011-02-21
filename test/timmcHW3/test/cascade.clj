@@ -33,7 +33,7 @@
   (create :dim #() true
 	  :pose #() true
 	  :xform #() [:pose :dim]
-	  :hover #() false
+	  :hover #() true
 	  :udata #() true
 	  :painting #() [:udata :xform :hover]
 	  :mode #() [:udata]
@@ -43,4 +43,16 @@
   (is (= (dependants-1 sample :udata) #{:painting :mode}))
   (is (= (dependants   sample :udata) #{:painting :mode :toolstate}))
   (is (empty? (dependants sample :toolstate))))
+
+(deftest dirtying
+  (let [d-toolstate (dirty sample :toolstate)
+	d-udata (dirty sample :udata)]
+    (is (= (clean? d-toolstate :toolstate) false))
+    (is (= (clean? d-toolstate :dim) true))
+    (is (= (clean? d-toolstate :mode) true))
+    (is (= (clean? d-udata :udata) false))
+    (is (= (clean? d-udata :painting) false))
+    (is (= (clean? d-udata :mode) false))
+    (is (= (clean? d-udata :toolstate) false))
+    (is (= (clean? d-udata :xform) true))))
 
