@@ -15,7 +15,7 @@
 ; - Keys of map are keywords representing nodes of state
 ; - Values of map are themselves maps
 ;   - :clean? <boolean> - whether this node is clean
-;   - :deps <vector<keyword>>} - nodes that this node depends on
+;   - :deps <set<keyword>>} - nodes that this node depends on
 ;   - :cleaner <fn> - a function that can clean this node's state, assuming dependency nodes are already clean
 
 (defn clean?
@@ -41,8 +41,11 @@
         (when-not (contains? cascade d)
            (throw (IllegalArgumentException. (str "Dependency keyword does not exist in cascade:" d))))))
   (let [[initial deps] (if (coll? req-kws-or-clean?)
-                         [(every? true? (map #(clean? cascade %) req-kws-or-clean?)) req-kws-or-clean?]
-                         [req-kws-or-clean? []])]
+                         [(every? true? (map #(clean? cascade %)
+					     req-kws-or-clean?))
+			  (set req-kws-or-clean?)]
+                         [req-kws-or-clean?
+			  #{}])]
      (assoc cascade node-kw {:clean? initial :deps deps :cleaner cleaner-fn})))
 
 (defn create
