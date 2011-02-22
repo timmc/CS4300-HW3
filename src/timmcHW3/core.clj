@@ -6,6 +6,7 @@
    [timmcHW3.gui])
   (:use timmcHW3.state)
   (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
+  (:require [timmcHW3.cascade :as dirt])
   (:import
    [javax.swing SwingUtilities UIManager
     JFrame JComponent JPanel JMenuItem JCheckBoxMenuItem JButton JSpinner]
@@ -21,6 +22,24 @@
 (def ^{:doc "The viewpoint's state."} view (ref nil))
 (def ^{:doc "Global pointer to current state."} state (ref nil))
 (def ^{:doc "User data that needs undo/redo."} udata (ref nil))
+(def ^{:doc "State dirtiness cascade."} *cascade* (ref nil))
+
+(defn dirty!
+  "Mark a piece of state as dirty."
+  [kw]
+  (dosync
+   (ref-set *cascade* (dirt/dirty @*cascade* kw))
+   nil))
+
+(defn clean!
+  "Clean up state and re-display where necessary."
+  ([kw]
+     (dirty! kw)
+     (clean!))
+  ([]
+     (dosync
+      (ref-set *cascade* (dirt/clean @*cascade* :all))
+      nil)))
 
 ;;;-- Viewpoint --;;;
 
@@ -66,15 +85,14 @@
      (assoc-in-ref! view [:xform-to-view] at)
      (assoc-in-ref! view [:xform-from-view] (.createInverse at)))))
 
-(defn update-canvas-depends!
+(defn update-canvas-shape!
   "Update variables that depend on the canvas size or other state."
   []
   (dosync
    (let [dim (.getSize (.canvas @gui))
 	 [dim-w dim-h] (de-dim dim)]
      (assoc-in-ref! view [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
-     (assoc-in-ref! view [:viewport-dim] dim)))
-  (update-xform!))
+     (assoc-in-ref! view [:viewport-dim] dim))))
 
 (defn update-pose!
   "Update view based on current state of Pose spinners."
@@ -83,8 +101,7 @@
    (let [rot (double (.getValue (.spinner-rot @gui)))
 	 minspect (zoom-to-minspect (.getValue (.spinner-zoom @gui)))]
      (assoc-in-ref! view [:view-rot] rot)
-     (assoc-in-ref! view [:view-minspect] minspect))
-   (update-xform!)))
+     (assoc-in-ref! view [:view-minspect] minspect))))
 
 ;;;-- State --;;;
 
@@ -109,7 +126,7 @@
   [r]
   (seq @r))
 
-(defn reflect-history-state!
+(defn update-history-gui!
   "Reflect current undo/redo state into GUI."
   []
   (let [^JMenuItem mi-undo (.mi-undo @gui)
@@ -140,7 +157,7 @@
        (ref-set data-past (conj @data-past old-state))
        (ref-set data-future ()) ; destroy the future
        (ref-set udata new-state)))
-   (reflect-history-state!)))
+   (dirty! :history-gui)))
 
 ;;;-- Math --;;;
 
@@ -212,8 +229,8 @@
      (and (<= (Math/abs (- (.getX vvertex) vx)) pick-radius)
 	  (<= (Math/abs (- (.getY vvertex) vy)) pick-radius))))
 
-(defn check-hover!
-  "Check which vertex is hovered. Return (boolean) whether this has changed."
+(defn update-hover!
+  "Check which vertex is hovered."
   []
   (dosync
    (let [curX (.mouseX @state)
@@ -298,7 +315,8 @@
   (dosync
    (ref-set to (conj @to @udata))
    (ref-set udata (first @from))
-   (ref-set from (rest @from))))
+   (ref-set from (rest @from))
+   (dirty! :udata)))
 
 (defn do-history!
   [undo?]
@@ -308,11 +326,9 @@
      (when (has-history? from)
        (cancel-active-command!)
        (slide-history! from to)
-       ;restore any saved-off state from inside udata
-       (update-mode!)))
-    (ask-redraw)
-    (reflect-history-state!)
-    (reflect-mode!)))
+       (dirty! :history-gui)
+       ;;;restore any saved-off state from inside udata
+       ))))
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
@@ -320,6 +336,8 @@
   (.dispose (.frame @gui)))
 
 ;;;-- Event interpretation --;;;
+
+;;; clean! will be called by relying code
 
 (defn canvas-click
   "A click event has occurred on the canvas."
@@ -332,17 +350,14 @@
 	      (.getState (.mi-view-control @gui))
 	      (not= (.mode @state) :manipulate))
      (act! append-vertex! (loc-from-view (.getX e) (.getY e)))
-     (update-mode!)
-     (ask-redraw)
-     (reflect-mode!))))
+     (dirty! :udata))))
 
 (defn canvas-mouse-move
   [^MouseEvent e]
   (dosync
    (assoc-in-ref! state [:mouseX] (.getX e))
    (assoc-in-ref! state [:mouseY] (.getY e))
-   (when (check-hover!)
-     (ask-redraw)))
+   (dirty! :mouse-pos))
   (when (.splitting? @state)
     ;TODO picking for Split
     ))
@@ -356,8 +371,8 @@
   (dosync
    (assoc-in-ref! state [:mouseX] -1)
    (assoc-in-ref! state [:mouseY] -1)
-   (when (assoc-in-ref! state [:hovered] nil)
-     (ask-redraw))))
+   (assoc-in-ref! state [:hovered] nil)
+   (dirty! :hover)))
 
 (defn canvas-scroll
   [^MouseWheelEvent e]
@@ -367,11 +382,11 @@
 
 (defn reflect-view!
   "Reflect view state into GUI."
-  [rview rgui]
-  (doto (.spinner-zoom @rgui)
-    (.setValue (minspect-to-zoom (.view-minspect @rview))))
-  (doto (.spinner-rot @rgui)
-    (.setValue (.view-rot @rview))))
+  []
+  (doto (.spinner-zoom @gui)
+    (.setValue (minspect-to-zoom (.view-minspect @view))))
+  (doto (.spinner-rot @gui)
+    (.setValue (.view-rot @view))))
 
 (defn enliven!
   "Add action listeners to GUI components."
@@ -380,17 +395,19 @@
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
-	 (do-history! true)))))
+	 (do-history! true)
+	 (clean!)))))
   (doto (.mi-redo @rgui)
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
-	 (do-history! false)))))
+	 (do-history! false)
+	 (clean!)))))
   (doto (.mi-view-control @rgui)
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
-	 (ask-redraw)))))
+	 (clean! :painting)))))
   (doto (.mi-exit @rgui)
     (.addActionListener
      (proxy [ActionListener] []
@@ -400,20 +417,18 @@
     (.addChangeListener
      (proxy [ChangeListener] []
        (stateChanged [_]
-	 (update-pose!)
-	 (ask-redraw)))))
+	 (clean! :pose-spinners)))))
   (doto (.spinner-zoom @rgui)
     (.addChangeListener
      (proxy [ChangeListener] []
        (stateChanged [_]
-	 (update-pose!)
-	 (ask-redraw)))))
+	 (clean! :pose-spinners)))))
   (let [mouse (proxy [MouseAdapter] []
-		(mouseClicked [e] (canvas-click e))
-		(mouseDragged [e] (canvas-drag e))
-		(mouseExited [_] (canvas-mouse-exited))
-		(mouseMoved [e] (canvas-mouse-move e))
-		(mouseWheelMoved [e] (canvas-scroll e)))]
+		(mouseClicked [e] (canvas-click e) (clean!))
+		(mouseDragged [e] (canvas-drag e) (clean!))
+		(mouseExited [_] (canvas-mouse-exited) (clean!))
+		(mouseMoved [e] (canvas-mouse-move e) (clean!))
+		(mouseWheelMoved [e] (canvas-scroll e) (clean!)))]
     (doto (.canvas @rgui)
       (.addMouseListener mouse)
       (.addMouseMotionListener mouse)
@@ -421,10 +436,31 @@
       (.addComponentListener
        (proxy [ComponentAdapter] []
 	 (componentResized [_]
-	   (update-canvas-depends!)
-	   (ask-redraw)))))))
+	   (clean! :canvas-shape)))))))
 
 ;;;-- Setup --;;;
+
+(defn make-cascade
+  "Create an initial state cascade."
+  []
+  (dirt/create :canvas-shape nil false ; shape and size of canvas component
+	       :center update-canvas-shape! [:canvas-shape]
+	       :pose-spinners nil false ; data in JSpinners
+	       :pose update-pose! [:pose-spinners]
+	       :mouse-pos nil false ; mouseX and mouseY in @state
+	       :hover update-hover! [:mouse-pos]
+	       :udata nil false ; pretty much anything in @udata
+	       :xform update-xform! [:pose :center]
+	       :mode update-mode! [:udata]
+	       :toolstate reflect-mode! [:mode]
+	       :pose-gui reflect-view! true ; pose info has been changed from elsewhere
+	       :history-gui update-history-gui! true ; undo/redo has been committed
+	       ;;; top-level states
+	       :painting ask-redraw [:udata :xform :hover]
+	       :gui nil [:toolstate :pose-gui :history-gui]
+	       ;;; collector
+	       :all nil [:painting :gui]
+	       ))
 
 (defn launch
   "Create and display the GUI."
@@ -441,10 +477,8 @@
 		      :view-minspect default-view-minspect
 		      :view-rot default-view-rot}))
      (ref-set udata (make-blank-UserData))
-     (update-mode!))
-    (reflect-mode!)
-    (reflect-view! view gui)
-    (update-canvas-depends!)
+     (ref-set *cascade* (make-cascade)))
+    (clean!)
     (enliven! gui)
     (.setVisible frame true)))
 
@@ -453,4 +487,3 @@
   [& args]
   (SwingUtilities/invokeLater launch))
 
-;;;TODO: Use *-dirty? refs and chain their setting.

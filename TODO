@@ -1,1 +1,3 @@
-* Use a stack with references to a map to handle the undo history.
+* Add error checks to cascade
+* Reorg core to group cleaners and event handlers, etc.
+
