@@ -5,6 +5,16 @@
 (deftest empty-create
   (is (empty? (create))))
 
+;;; Error checking only to prevent cycles in the graph, nothing more.
+
+(deftest bad-create
+  (is (thrown-with-msg? Exception #"triplet" (create :foo nil))))
+
+(deftest bad-add
+  (is (thrown-with-msg? Exception #"does not exist" (add (create) :foo #() [:bar])))
+  (is (thrown-with-msg? Exception #"already exists" (add (create :foo nil false) :foo nil true))))
+  
+
 (deftest explicit-state
   (is (= (clean? (create :foo #() true) :foo) true))
   (is (= (clean? (create :foo #() false) :foo) false)))
@@ -76,6 +86,10 @@
     (is (= (clean? d-udata :toolstate) false))
     (is (= (clean? d-udata :xform) true))))
 
+(deftest bad-dirty
+  (is (thrown-with-msg? Exception #"do not exist.*albert"
+	(dirty sample :albert))))
+
 (def l0 (ref 0))
 (def l1 (ref 0))
 (def l3 (ref 0))
@@ -111,4 +125,8 @@
      (is (= @l3 1))
      (is (clean? result :l3))
      (is (clean? result :l1)))))
+
+(deftest bad-clean
+  (is (thrown-with-msg? Exception #"does not contain.*albert"
+	(clean diamond :albert))))
 
