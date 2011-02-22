@@ -34,6 +34,16 @@
   [cascade node-kw]
   (-> cascade node-kw :clean?))
 
+(defn node-names
+  "Return a set of node keywords."
+  [cascade]
+  (set (keys cascade)))
+
+(defn states
+  "Return a map of node names to states."
+  [cascade]
+  (into {} (for [[name {state :clean?}] cascade] [name state])))
+
 (defn add
   "Given a cascade, return a new cascade with the new node, cleaner function,
    and either a list of dependencies or the current cleanliness state.

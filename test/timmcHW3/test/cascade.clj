@@ -39,6 +39,15 @@
 	  :mode #() [:udata]
 	  :toolstate #() [:mode]))
 
+(deftest read-names
+  (is (= (node-names sample)
+	 #{:dim :pose :xform :hover :udata :painting :mode :toolstate})))
+
+(deftest read-states
+  (is (= (states sample)
+	 {:dim true :pose true :xform true :hover true :udata true
+	  :painting true :mode true :toolstate true})))
+
 (deftest get-cleaner
   (let [updater #()
 	basic (create :foo updater false :bar nil true)]
