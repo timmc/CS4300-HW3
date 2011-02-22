@@ -1,9 +1,11 @@
 (ns timmcHW3.cascade
-  "Manage state dirtiness dependency cascades using a persistent object.
-  
+  "Manage state dirtiness dependency cascades using a persistent data structure.
+
+   
    State update dependencies are modeled as a directed acyclic graph of nodes
    that can be clean or dirty, where setting a node as dirty turns the nodes
-   at all outedges dirty recursively.
+   at all outedges dirty recursively. The clean state is represented as
+   boolean true and dirty as boolean false.
    Each node is associated with an optional \"cleaner\" function intended to
    update that aspect of the relying program's state. When a dependant node
    needs to be marked clean, it cleans all of its own dependencies and then
@@ -12,22 +14,38 @@
    graph, so cleaners must be idempotent. (However, the cleanup algorithm
    does try to avoid this scenario as a performance measure.)
 
+   Nota Bene: Cleaner functions should not attempt to modify the cascade they
+   are called from. The desire to write such code is an indication that the
+   cascade object is missing a state or two.
+
    Recommended usage: (create ...) a cascade, specifying all nodes at once,
    and save it in a ref. Use (dirty ...) whenever a piece of your program's
    state has changed, and (clean ...) on that node in order to force it
-   to become clean again. clean is a constant-time operation on clean nodes.
+   to become clean again. clean is a fast operation on clean nodes. You may find
+   it useful to add an :all node that depends (transitively) on all other nodes.
+   All functions besides create, add, set-all, dirty, and clean are provided
+   mainly for testing and debugging purposes, and are not recommended for use
+   in core logic paths.
 
    Copyright 2011 Tim McCormack; free-licensed under GPL v3."
   (:require [clojure.set :as set])
   (:gen-class))
 
 ; Implementation details:
-; - Top object is a map
-; - Keys of map are keywords representing nodes of state
-; - Values of map are themselves maps:
-;   - :clean? <boolean> - whether this node is clean
-;   - :deps <set<keyword>>} - nodes that this node depends on
-;   - :cleaner <fn> - the cleaner for this node of the relying program's state
+;;; - Top object is a map
+;;; - Keys of map are keywords representing nodes of state
+;;; - Values of map are themselves maps:
+;;;   - :clean? <boolean> - whether this node is clean
+;;;   - :deps <set<keyword>>} - nodes that this node depends on
+;;;   - :cleaner <fn> - the cleaner for this node of the relying program's state
+
+
+;;; TODO:
+;;; - Change implementation (add indirection) to accomodate below changes
+;;; - Keep a set of top-level nodes (no dependants)
+;;; - Add a helper clean-all that cleans all the top-level nodes.
+
+
 
 (defn clean?
   "Check if a node is clean."
@@ -96,7 +114,7 @@
 		     (conj (dependencies cascade d) d))))
 
 (defn set-all
-  "Set all nodes to the given state (true = clean)."
+  "Set all nodes to the given state. Useful in initialization."
   [cascade state]
   (into {} (for [[k vm] cascade]
 	     [k (assoc vm :clean? state)])))
