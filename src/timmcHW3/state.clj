@@ -73,12 +73,14 @@
    ^{:doc "Last mouse Y position in view"}
    mouseY
    ^{:doc "World-vertex (identical) that cursor is hovering over, or nil."}
-   hovered
+   hover-vertex
+   ^{:doc "World-vertex (identical) that is being dragged, or nil."}
+   drag-vertex
    ])
 
 (defn ^ProgState make-blank-ProgState
   []
-  (ProgState. :extend0 false -1 -1 nil))
+  (ProgState. :extend0 false -1 -1 nil nil))
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
     UserData

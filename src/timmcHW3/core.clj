@@ -25,16 +25,16 @@
 (def ^{:doc "State dirtiness cascade."} *cascade* (ref nil))
 
 (defn dirty!
-  "Mark a piece of state as dirty."
-  [kw]
+  "Mark one or more pieces of state as dirty."
+  [& kws]
   (dosync
-   (ref-set *cascade* (dirt/dirty @*cascade* kw))
+   (ref-set *cascade* (reduce dirt/dirty @*cascade* kws))
    nil))
 
 (defn clean!
   "Clean up state and re-display where necessary."
-  ([kw]
-     (dirty! kw)
+  ([& kws]
+     (apply dirty! kws)
      (clean!))
   ([]
      (dosync
@@ -103,7 +103,11 @@
      (assoc-in-ref! view [:view-rot] rot)
      (assoc-in-ref! view [:view-minspect] minspect))))
 
-;;;-- State --;;;
+;;;-- User data modifiers --;;;
+
+;;; Each function must have own metadata containing :actname, which will be used
+;;; for display in the undo/redo menu. It is assumed that every function here
+;;; will be called from act! and will dirty the :udata cascade node.
 
 (def ^{:doc "Add a vertex to the curve."}
   append-vertex!
@@ -112,6 +116,17 @@
     (dosync
      (assoc-in-ref! udata [:curve]
 		    (conj (.curve @udata) wp)))))
+
+(def ^{:doc "Replace an old world-vertex with a new one, mark dirty."}
+  replace-vertex!
+  ^{:actname "move vertex"}
+  (fn [^Point2D old,^Point2D new]
+    (when (nil? new)
+      (throw (IllegalArgumentException. "Given nil replacement vertex.")))
+    (dosync
+     (assoc-in-ref! udata [:curve]
+		    (map #(if (identical? % old) new %)
+			 (.curve @udata))))))
 
 ;;;-- History --;;;
 
@@ -157,7 +172,7 @@
        (ref-set data-past (conj @data-past old-state))
        (ref-set data-future ()) ; destroy the future
        (ref-set udata new-state)))
-   (dirty! :history-gui)))
+   (dirty! :history-gui :udata)))
 
 ;;;-- Math --;;;
 
@@ -237,7 +252,7 @@
 	 curY (.mouseY @state)
 	 hovered (first (filter #(pick-vertex? curX curY (loc-to-view %))
 				(.curve @udata)))]
-     (assoc-in-ref! state [:hovered] hovered))))
+     (assoc-in-ref! state [:hover-vertex] hovered))))
 
 ;;;-- Rendering --;;;
 
@@ -258,7 +273,7 @@
   [^Graphics2D g, wpoints]
   (when (.getState (.mi-view-control @gui))
     (draw-control-segments g (map loc-to-view wpoints))
-    (draw-control-points g wpoints (.xform-to-view @view) (.hovered @state)))
+    (draw-control-points g wpoints (.xform-to-view @view) (.hover-vertex @state)))
   (when (> (count wpoints) 2)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
@@ -335,13 +350,24 @@
   []
   (.dispose (.frame @gui)))
 
+(defn register-mouse-loc!
+  "Make note of new mouse location, dirty if changed."
+  ([x y]
+     (dosync
+      (when (or (assoc-in-ref! state [:mouseX] x)
+		(assoc-in-ref! state [:mouseY] y))
+	(dirty! :mouse-pos))))
+  ([^MouseEvent e]
+     (register-mouse-loc! (.getX e) (.getY e))))
+
 ;;;-- Event interpretation --;;;
 
 ;;; clean! will be called by relying code
 
-(defn canvas-click
+(defn canvas-mouse-clicked
   "A click event has occurred on the canvas."
   [^MouseEvent e]
+  (register-mouse-loc! e)
   (dosync
    (when (and (= (.getButton e) MouseEvent/BUTTON1)
 	      (not (.isShiftDown e))
@@ -349,33 +375,55 @@
 	      (not (.splitting? @state))
 	      (.getState (.mi-view-control @gui))
 	      (not= (.mode @state) :manipulate))
-     (act! append-vertex! (loc-from-view (.getX e) (.getY e)))
-     (dirty! :udata))))
+     (act! append-vertex! (loc-from-view (.getX e) (.getY e))))))
 
-(defn canvas-mouse-move
+(defn canvas-mouse-moved
   [^MouseEvent e]
-  (dosync
-   (assoc-in-ref! state [:mouseX] (.getX e))
-   (assoc-in-ref! state [:mouseY] (.getY e))
-   (dirty! :mouse-pos))
+  (register-mouse-loc! e)
   (when (.splitting? @state)
     ;TODO picking for Split
     ))
 
-(defn canvas-drag
+(defn canvas-mouse-pressed
+  "Might be the start of a drag."
   [^MouseEvent e]
-  )
+  (register-mouse-loc! e) ; TODO cancel any in-progress dragging?
+  (dosync
+   (clean! :hover)
+   (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state))))
+
+(defn canvas-mouse-dragged
+  [^MouseEvent e]
+  (register-mouse-loc! e)
+  (dosync
+   (let [old-drag (.drag-vertex @state)]
+     (if (nil? old-drag)
+       (do
+	 (clean! :hover)
+	 (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state)))
+       (do
+	 (let [new-drag (loc-from-view (Point2D$Double. (.getX e) (.getY e)))]
+	   (assoc-in-ref! state [:drag-vertex] new-drag)
+	   (assoc-in-ref! state [:hover-vertex] new-drag)
+	   (act! replace-vertex! old-drag new-drag))))))) ; TODO don't modify udata until drag end, or at least preserve old udata for restoring.
+
+(defn canvas-mouse-released
+  "In some cases the end of a drag."
+  [^MouseEvent e]
+  (register-mouse-loc! e)
+  (assoc-in-ref! state [:drag-vertex] nil))
 
 (defn canvas-mouse-exited
   []
   (dosync
    (assoc-in-ref! state [:mouseX] -1)
    (assoc-in-ref! state [:mouseY] -1)
-   (assoc-in-ref! state [:hovered] nil)
+   (assoc-in-ref! state [:hover-vertex] nil)
    (dirty! :hover)))
 
-(defn canvas-scroll
+(defn canvas-wheel-moved
   [^MouseWheelEvent e]
+  (register-mouse-loc! e)
   );TODO
 
 ;;;-- Components --;;;
@@ -424,11 +472,13 @@
        (stateChanged [_]
 	 (clean! :pose-spinners)))))
   (let [mouse (proxy [MouseAdapter] []
-		(mouseClicked [e] (canvas-click e) (clean!))
-		(mouseDragged [e] (canvas-drag e) (clean!))
+		(mousePressed [e] (canvas-mouse-pressed e) (clean!))
+		(mouseDragged [e] (canvas-mouse-dragged e) (clean!))
+		(mouseReleased [e] (canvas-mouse-released e) (clean!))
 		(mouseExited [_] (canvas-mouse-exited) (clean!))
-		(mouseMoved [e] (canvas-mouse-move e) (clean!))
-		(mouseWheelMoved [e] (canvas-scroll e) (clean!)))]
+		(mouseClicked [e] (canvas-mouse-clicked e) (clean!))
+		(mouseMoved [e] (canvas-mouse-moved e) (clean!))
+		(mouseWheelMoved [e] (canvas-wheel-moved e) (clean!)))]
     (doto (.canvas @rgui)
       (.addMouseListener mouse)
       (.addMouseMotionListener mouse)

@@ -1,3 +1,5 @@
-* Add error checks to cascade
+* Cursor change on vertex hover
+* Why are vertices being drawn in reverse order?
+* Splitting at least with a spinner
 * Reorg core to group cleaners and event handlers, etc.
 
