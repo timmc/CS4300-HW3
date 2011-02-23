@@ -503,11 +503,11 @@
 (defn launch
   "Create and display the GUI."
   []
+  (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
   (dosync
    (ref-set state (make-blank-ProgState))
    (ref-set gui (make-blank-GUI)))
   (let [frame (create! gui [:frame] new-frame gui render)]
-    (UIManager/setLookAndFeel (UIManager/getSystemLookAndFeelClassName))
     (dosync
      (ref-set view
 	      (merge (make-blank-Viewpoint)
