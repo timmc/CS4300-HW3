@@ -29,11 +29,13 @@
    spinner-rot
    ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
    spinner-zoom
+   ^{:doc "Button to zoom to extent of curve." :tag JButton}
+   button-fit
    ])
 
 (defn ^GUI make-blank-GUI
   []
-  (GUI. nil nil nil nil nil nil nil nil nil nil))
+  (GUI. nil nil nil nil nil nil nil nil nil nil nil))
 
 (defrecord ^{:doc "Viewport state."}
     Viewpoint

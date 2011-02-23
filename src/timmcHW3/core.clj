@@ -45,6 +45,24 @@
 
 (def ^{:doc "Undo/redo buffers."} *history* (ref nil))
 
+;;;-- Mode accessors --;;;
+
+(defn curve-has-extent?
+  "Return true if we can define the size of the control polygon."
+  []
+  (>= (count (.curve @udata)) 2))
+
+(defn at-least-cubic?
+  "Return true if we are showing enough points to draw a non-trivial curve."
+  []
+  (>= (count (.curve @udata)) 3))
+
+(defn show-control-poly?
+  "Check whether we are showing the control polygon."
+  []
+  (or (.getState (.mi-view-control @gui))
+      (not (at-least-cubic?))))
+
 ;;;-- Viewpoint --;;;
 
 (def default-rot-center [0 0])
@@ -265,10 +283,10 @@
 (defn draw-curve
   "Draw a potentially incomplete curve."
   [^Graphics2D g, wpoints]
-  (when (.getState (.mi-view-control @gui))
+  (when (show-control-poly?)
     (draw-control-segments g (map loc-to-view wpoints))
     (draw-control-points g wpoints (.xform-to-view @view) (.hover-vertex @state)))
-  (when (> (count wpoints) 2)
+  (when (at-least-cubic?)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
     (let [smin 20
@@ -309,8 +327,8 @@
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
   []
-  ;;; none currently
-  )
+  (.setEnabled (.button-fit @gui) (curve-has-extent?))
+  (.setEnabled (.mi-view-control @gui) (at-least-cubic?)))
 
 ;;;-- Event handlers --;;;
 
@@ -325,6 +343,10 @@
      (assoc-in-ref! *history* [] (hist-mod @*history*))
      (ref-set udata (hist/current @*history*))
      (dirty! :history-gui :udata))))
+
+(defn do-best-fit
+  "If possible, bring the view into best fit around the curve."
+  [])
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
@@ -341,7 +363,7 @@
   ([^MouseEvent e]
      (register-mouse-loc! (.getX e) (.getY e))))
 
-;;;-- Event interpretation --;;;
+;;;-- Event dispatch --;;;
 
 ;;; clean! will be called by relying code
 
@@ -353,7 +375,7 @@
    (when (and (= (.getButton e) MouseEvent/BUTTON1)
 	      (not (.isShiftDown e))
 	      (not (.isControlDown e))
-	      (.getState (.mi-view-control @gui))
+	      (show-control-poly?)
 	      (not= (.mode @state) :manipulate))
      (append-vertex! (loc-from-view (.getX e) (.getY e)))
      (save-action! "add vertex"))))
@@ -367,14 +389,14 @@
   [^MouseEvent e]
   (register-mouse-loc! e) ; TODO cancel any in-progress dragging?
   (clean! :hover)
-  (when (.getState (.mi-view-control @gui))
+  (when (show-control-poly?)
     (dosync
      (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state)))))
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (register-mouse-loc! e)
-  (when (.getState (.mi-view-control @gui))
+  (when (show-control-poly?)
     (dosync
      (let [old-drag (.drag-vertex @state)]
        (if (nil? old-drag)
@@ -450,6 +472,12 @@
      (proxy [ChangeListener] []
        (stateChanged [_]
 	 (clean! :pose-spinners)))))
+  (doto (.button-fit @rgui)
+    (.addActionListener
+     (proxy [ActionListener] []
+       (actionPerformed [_]
+	 (do-best-fit)
+	 (clean!)))))
   (doto (.spinner-zoom @rgui)
     (.addChangeListener
      (proxy [ChangeListener] []

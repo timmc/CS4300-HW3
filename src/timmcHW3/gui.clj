@@ -94,6 +94,12 @@
     (.setEditor js ned)
     js))
 
+(defn- ^JButton new-fit-button
+  "Make a Best Fit button for centering the polygon."
+  [rgui]
+  (doto (JButton. "Best fit")
+    (.setToolTipText "Zoom curve to just fit inside viewport")))
+
 (defn- ^JPanel new-pose-panel
   "Make a Pose panel."
   [rgui]
@@ -103,7 +109,8 @@
 				(add-label "Rotation:"
 					   (create! rgui [:spinner-rot] new-pose-rotate rgui))
 				(add-label "Zoom:"
-					   (create! rgui [:spinner-zoom] new-pose-zoom rgui))))))
+					   (create! rgui [:spinner-zoom] new-pose-zoom rgui))
+				(create! rgui [:button-fit] new-fit-button rgui)))))
 
 (defn- ^JPanel new-controls
   "Make a control panel."
