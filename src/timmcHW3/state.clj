@@ -29,13 +29,11 @@
    spinner-rot
    ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
    spinner-zoom
-   ^{:doc "Curve splitter button." :tag JButton}
-   split
    ])
 
 (defn ^GUI make-blank-GUI
   []
-  (GUI. nil nil nil nil nil nil nil nil nil nil nil))
+  (GUI. nil nil nil nil nil nil nil nil nil nil))
 
 (defrecord ^{:doc "Viewport state."}
     Viewpoint
@@ -66,8 +64,6 @@
             :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
             :manipulate - Allow dragging of vertices."}
    mode
-   ^{:doc "True if splitting is active."}
-   splitting?
    ^{:doc "Last mouse X position in view"}
    mouseX
    ^{:doc "Last mouse Y position in view"}
@@ -80,7 +76,7 @@
 
 (defn ^ProgState make-blank-ProgState
   []
-  (ProgState. :extend0 false -1 -1 nil nil))
+  (ProgState. :extend0 -1 -1 nil nil))
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
     UserData

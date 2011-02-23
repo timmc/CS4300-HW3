@@ -164,7 +164,6 @@
   "Cancel any in-progress commands and temporary state."
   []
   (dosync
-   (assoc-in-ref! state [:splitting?] false)
    (assoc-in-ref! state [:drag-vertex] nil)
    (ref-set udata (hist/current @*history*))
    (dirty! :udata)))
@@ -310,7 +309,8 @@
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
   []
-  (.setEnabled (.split @gui) (not= (.mode @state) :extend0)))
+  ;;; none currently
+  )
 
 ;;;-- Event handlers --;;;
 
@@ -353,7 +353,6 @@
    (when (and (= (.getButton e) MouseEvent/BUTTON1)
 	      (not (.isShiftDown e))
 	      (not (.isControlDown e))
-	      (not (.splitting? @state))
 	      (.getState (.mi-view-control @gui))
 	      (not= (.mode @state) :manipulate))
      (append-vertex! (loc-from-view (.getX e) (.getY e)))
@@ -361,10 +360,7 @@
 
 (defn canvas-mouse-moved
   [^MouseEvent e]
-  (register-mouse-loc! e)
-  (when (.splitting? @state)
-    ;TODO picking for Split
-    ))
+  (register-mouse-loc! e))
 
 (defn canvas-mouse-pressed
   "Might be the start of a drag."
