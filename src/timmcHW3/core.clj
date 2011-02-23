@@ -7,6 +7,7 @@
   (:use timmcHW3.state)
   (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
   (:require [timmcHW3.cascade :as dirt])
+  (:require [timmcHW3.history :as hist])
   (:import
    [javax.swing SwingUtilities UIManager
     JFrame JComponent JPanel JMenuItem JCheckBoxMenuItem JButton JSpinner]
@@ -22,6 +23,7 @@
 (def ^{:doc "The viewpoint's state."} view (ref nil))
 (def ^{:doc "Global pointer to current state."} state (ref nil))
 (def ^{:doc "User data that needs undo/redo."} udata (ref nil))
+
 (def ^{:doc "State dirtiness cascade."} *cascade* (ref nil))
 
 (defn dirty!
@@ -40,6 +42,8 @@
      (dosync
       (ref-set *cascade* (dirt/clean @*cascade* :all))
       nil)))
+
+(def ^{:doc "Undo/redo buffers."} *history* (ref nil))
 
 ;;;-- Viewpoint --;;;
 
@@ -105,74 +109,65 @@
 
 ;;;-- User data modifiers --;;;
 
-;;; Each function must have own metadata containing :actname, which will be used
-;;; for display in the undo/redo menu. It is assumed that every function here
-;;; will be called from act! and will dirty the :udata cascade node.
+(defn append-vertex!
+  "Add a vertex to the curve."
+  [^Point2D wp]
+  (dosync
+   (assoc-in-ref! udata [:curve]
+		  (conj (.curve @udata) wp))
+   (dirty! :udata)))
 
-(def ^{:doc "Add a vertex to the curve."}
-  append-vertex!
-  ^{:actname "add vertex"}
-  (fn [^Point2D wp]
-    (dosync
-     (assoc-in-ref! udata [:curve]
-		    (conj (.curve @udata) wp)))))
-
-(def ^{:doc "Replace an old world-vertex with a new one, mark dirty."}
-  replace-vertex!
-  ^{:actname "move vertex"}
-  (fn [^Point2D old,^Point2D new]
-    (when (nil? new)
-      (throw (IllegalArgumentException. "Given nil replacement vertex.")))
-    (dosync
-     (assoc-in-ref! udata [:curve]
-		    (map #(if (identical? % old) new %)
-			 (.curve @udata))))))
+(defn replace-vertex!
+  "Replace an old world-vertex with a new one, mark dirty."
+  [^Point2D old,^Point2D new]
+  (when (nil? new)
+    (throw (IllegalArgumentException. "Given nil replacement vertex.")))
+  (dosync
+   ;;; (into [] ...) keeps it a vector, and in the right order 
+   (assoc-in-ref! udata [:curve]
+		  (into [] (map #(if (identical? % old) new %)
+				(.curve @udata))))
+   (dirty! :udata)))
 
 ;;;-- History --;;;
-
-(def ^{:doc "Undo buffer."}
-  data-past (ref ()))
-
-(def ^{:doc "Redo buffer."}
-  data-future (ref ()))
-
-(defn has-history?
-  "Return true if there is history in this ref."
-  [r]
-  (seq @r))
 
 (defn update-history-gui!
   "Reflect current undo/redo state into GUI."
   []
   (let [^JMenuItem mi-undo (.mi-undo @gui)
 	^JMenuItem mi-redo (.mi-redo @gui)]
-    (if (has-history? data-past)
+    (if (hist/undo? @*history*)
       (doto mi-undo
 	(.setEnabled true)
-	(.setText (str "Undo " (.act @udata))))
+	(.setText (str "Undo " (.act (hist/current @*history*)))))
       (doto mi-undo
 	(.setEnabled false)
 	(.setText "Nothing to undo")))
-    (if (has-history? data-future)
+    (if (hist/redo? @*history*)
       (doto mi-redo
 	(.setEnabled true)
-	(.setText (str "Redo " (.act (first @data-future)))))
+	(.setText (str "Redo " (.act (hist/peek-future @*history*)))))
       (doto mi-redo
 	(.setEnabled false)
 	(.setText "Nothing to redo")))))
 
-(defn act!
-  "Call ref-updating f (no other side effects) with arguments. Uses :actname
-   metadata found on f to add to undo buffer."
-  [f & args]
+(defn save-action!
+  "Save the current state as a new history state. The action name will be
+   displayed to the user as the name of the action that produced this state."
+  [^String actname]
   (dosync
-   (let [old-state @udata] ; leave line here so that we can assoc any saved state onto it
-     (apply f args) ; change @udata
-     (let [new-state (assoc @udata :act (:actname (meta f)))]
-       (ref-set data-past (conj @data-past old-state))
-       (ref-set data-future ()) ; destroy the future
-       (ref-set udata new-state)))
-   (dirty! :history-gui :udata)))
+   (assoc-in-ref! udata [:act] actname)
+   (ref-set *history* (hist/act @*history* @udata))
+   (dirty! :history-gui)))
+
+(defn cancel-action!
+  "Cancel any in-progress commands and temporary state."
+  []
+  (dosync
+   (assoc-in-ref! state [:splitting?] false)
+   (assoc-in-ref! state [:drag-vertex] nil)
+   (ref-set udata (hist/current @*history*))
+   (dirty! :udata)))
 
 ;;;-- Math --;;;
 
@@ -317,33 +312,19 @@
   []
   (.setEnabled (.split @gui) (not= (.mode @state) :extend0)))
 
-(defn cancel-active-command!
-  "Cancel any in-progress commands and temporary state."
-  []
-  (assoc-in-ref! state [:splitting?] false))
-
 ;;;-- Event handlers --;;;
 
-(defn slide-history!
-  "Slide history for undo/redo."
-  [from to]
-  (dosync
-   (ref-set to (conj @to @udata))
-   (ref-set udata (first @from))
-   (ref-set from (rest @from))
-   (dirty! :udata)))
-
 (defn do-history!
-  [undo?]
-  (let [from (if undo? data-past data-future)
-	to (if undo? data-future data-past)]
-    (dosync
-     (when (has-history? from)
-       (cancel-active-command!)
-       (slide-history! from to)
-       (dirty! :history-gui)
-       ;;;restore any saved-off state from inside udata
-       ))))
+  "If (hist-when *history*) returns true, uses (hist-mod *history*) to get
+   a new history object. Any active commands will be canceled, and the new
+   current history item will overwrite udata."
+  [hist-when hist-mod]
+  (dosync
+   (when (hist-when @*history*)
+     (cancel-action!)
+     (assoc-in-ref! *history* [] (hist-mod @*history*))
+     (ref-set udata (hist/current @*history*))
+     (dirty! :history-gui :udata))))
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
@@ -375,7 +356,8 @@
 	      (not (.splitting? @state))
 	      (.getState (.mi-view-control @gui))
 	      (not= (.mode @state) :manipulate))
-     (act! append-vertex! (loc-from-view (.getX e) (.getY e))))))
+     (append-vertex! (loc-from-view (.getX e) (.getY e)))
+     (save-action! "add vertex"))))
 
 (defn canvas-mouse-moved
   [^MouseEvent e]
@@ -388,30 +370,35 @@
   "Might be the start of a drag."
   [^MouseEvent e]
   (register-mouse-loc! e) ; TODO cancel any in-progress dragging?
-  (dosync
-   (clean! :hover)
-   (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state))))
+  (clean! :hover)
+  (when (.getState (.mi-view-control @gui))
+    (dosync
+     (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state)))))
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (register-mouse-loc! e)
-  (dosync
-   (let [old-drag (.drag-vertex @state)]
-     (if (nil? old-drag)
-       (do
-	 (clean! :hover)
-	 (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state)))
-       (do
-	 (let [new-drag (loc-from-view (Point2D$Double. (.getX e) (.getY e)))]
-	   (assoc-in-ref! state [:drag-vertex] new-drag)
-	   (assoc-in-ref! state [:hover-vertex] new-drag)
-	   (act! replace-vertex! old-drag new-drag))))))) ; TODO don't modify udata until drag end, or at least preserve old udata for restoring.
+  (when (.getState (.mi-view-control @gui))
+    (dosync
+     (let [old-drag (.drag-vertex @state)]
+       (if (nil? old-drag)
+	 (do
+	   (clean! :hover)
+	   (assoc-in-ref! state [:drag-vertex] (.hover-vertex @state)))
+	 (do
+	   (let [new-drag (loc-from-view (Point2D$Double. (.getX e) (.getY e)))]
+	     (assoc-in-ref! state [:drag-vertex] new-drag)
+	     (assoc-in-ref! state [:hover-vertex] new-drag)
+	     (replace-vertex! old-drag new-drag))))))))
 
 (defn canvas-mouse-released
   "In some cases the end of a drag."
   [^MouseEvent e]
   (register-mouse-loc! e)
-  (assoc-in-ref! state [:drag-vertex] nil))
+  (when-not (nil? (.drag-vertex @state))
+    (save-action! "drag vertex")
+    (assoc-in-ref! state [:drag-vertex] nil)
+    (dirty! :painting))) ;TODO draw ghost of original during drag
 
 (defn canvas-mouse-exited
   []
@@ -443,18 +430,19 @@
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
-	 (do-history! true)
+	 (do-history! hist/undo? hist/undo)
 	 (clean!)))))
   (doto (.mi-redo @rgui)
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
-	 (do-history! false)
+	 (do-history! hist/redo? hist/redo)
 	 (clean!)))))
   (doto (.mi-view-control @rgui)
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_]
+	 (cancel-action!)
 	 (clean! :painting)))))
   (doto (.mi-exit @rgui)
     (.addActionListener
@@ -527,7 +515,8 @@
 		      :view-minspect default-view-minspect
 		      :view-rot default-view-rot}))
      (ref-set udata (make-blank-UserData))
-     (ref-set *cascade* (make-cascade)))
+     (ref-set *cascade* (make-cascade))
+     (ref-set *history* (hist/create @udata)))
     (clean!)
     (enliven! gui)
     (.setVisible frame true)))
