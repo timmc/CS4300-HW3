@@ -2,7 +2,7 @@
   "State records."
   (:import
    [java.awt Dimension]
-   [java.awt.geom AffineTransform]
+   [java.awt.geom AffineTransform Point2D]
    [javax.swing JFrame JComponent JPanel
     JMenu JMenuBar JMenuItem JCheckBoxMenuItem
     JSpinner JButton]))
@@ -39,13 +39,13 @@
 
 (defrecord ^{:doc "Viewport state."}
     Viewpoint
-  [^{:doc "Chosen center of rotation."}
+  [^{:doc "Chosen center of rotation." :tag Point2D}
    rot-center ; Translation: User drags new world point to center of window.
    ^{:doc "Minimum extent of world to show in both width and height."}
    view-minspect ; Scale: Resizing the window stretches the view.
    ^{:doc "Rotation of viewport."}
    view-rot ; Rotation: Around the center of the window.
-   ^{:doc "Viewport's pixel center coordinates as Point2D."}
+   ^{:doc "Viewport's pixel center coordinates as Point2D." :tag Point2D}
    view-center ; Centering: This is the center of rotation of the viewpoint.
    ^{:doc "World-to-viewport transform." :tag AffineTransform}
    xform-to-view

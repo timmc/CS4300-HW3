@@ -65,7 +65,7 @@
 
 ;;;-- Viewpoint --;;;
 
-(def default-rot-center [0 0])
+(def default-rot-center (Point2D$Double. 0 0))
 (def default-view-minspect 100)
 (def default-view-rot 0.0)
 
@@ -88,7 +88,7 @@
   "Calculate the world-to-viewport transformation."
   [view-w view-h]
   (dosync
-   (let [[drag-x drag-y] (.rot-center @view)
+   (let [[drag-x drag-y] (de-pt (.rot-center @view))
 	 minspect (min view-w view-h)
 	 magnification (/ minspect (.view-minspect @view))]
      (doto (AffineTransform.)
@@ -344,9 +344,30 @@
      (ref-set udata (hist/current @*history*))
      (dirty! :history-gui :udata))))
 
+(defn calc-best-fit
+  "Calculate new {:rot-center, :view-minspect} that may be merged into view."
+  []
+  (let [vverts (map loc-to-view (.curve @udata))
+	^Rectangle2D vbounds (poly-bounds vverts)
+	^Point2D wcenter (loc-from-view (.getCenterX vbounds)
+					(.getCenterY vbounds))
+	width-rescale (/ (.width vbounds)
+			 (.getWidth (.canvas @gui)))
+	height-rescale (/ (.height vbounds)
+			  (.getHeight (.canvas @gui)))
+	scale (max width-rescale height-rescale)
+	new-minspect (* 1.08 (.view-minspect @view) scale)]
+    {:rot-center wcenter :view-minspect new-minspect}))
+
 (defn do-best-fit
   "If possible, bring the view into best fit around the curve."
-  [])
+  []
+  (dosync
+   (when (curve-has-extent?)
+     (let [best (calc-best-fit)]
+       (assoc-in-ref! view [:rot-center] (:rot-center best))
+       (.setValue (.spinner-zoom @gui) (minspect-to-zoom (:view-minspect best)))
+       (dirty! :pose :pose-spinners)))))
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
@@ -433,14 +454,6 @@
 
 ;;;-- Components --;;;
 
-(defn reflect-view!
-  "Reflect view state into GUI."
-  []
-  (doto (.spinner-zoom @gui)
-    (.setValue (minspect-to-zoom (.view-minspect @view))))
-  (doto (.spinner-rot @gui)
-    (.setValue (.view-rot @view))))
-
 (defn enliven!
   "Add action listeners to GUI components."
   [rgui]
@@ -515,11 +528,10 @@
 	       :xform update-xform! [:pose :center]
 	       :mode update-mode! [:udata]
 	       :toolstate reflect-mode! [:mode]
-	       :pose-gui reflect-view! true ; pose info has been changed from elsewhere
 	       :history-gui update-history-gui! true ; undo/redo has been committed
 	       ;;; top-level states
 	       :painting ask-redraw [:udata :xform :hover]
-	       :gui nil [:toolstate :pose-gui :history-gui]
+	       :gui nil [:toolstate :history-gui]
 	       ;;; collector
 	       :all nil [:painting :gui]
 	       ))
