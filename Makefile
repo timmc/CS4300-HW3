@@ -28,6 +28,7 @@ pkg: pkg-clean
 	cp -r test/ $(PKGDIR)/test
 	cp -r doc/ $(PKGDIR)/doc
 	cp project.clj deploy/{run,setup}.sh $(PKGDIR)/
+	find ./pkg -name '*~' -delete
 	tar -czf $(PACKAGE_FILE) --directory pkg/ $(PROJNAME)/
 
 pkg-clean:
