@@ -16,7 +16,17 @@ Invoke ./run.sh to execute HW3.
 
 # Known bugs
 
-None known, though several anticipated features are missing.
+* If the user zooms in extremely far, say to a zoom of 8.1, floating-point
+  errors accumulate and result in a "quantized world" where the curve
+  breaks down into a jagged polygon. A possible solution is to periodically
+  renormalize the polygon coordinates (and zoom level to match.)
+* At extreme zoom levels, or by careful point placement, the user may succeed
+  in producing a curve that does not vary in one or both of x and y coordinates.
+  When the Best Fit button is used, this produces a division by zero and
+  corrupts the program state, preventing the use of any other features.
+  This might be ameliorated in the general case by catching the exception and
+  rolling back the entire program state to the last known good version, which
+  would be feasible due to the use of persistant data structures.
 
 # Extra credit
 

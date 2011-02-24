@@ -291,7 +291,7 @@
     (.setStroke g curve-stroke)
     (let [smin 20
 	  smax 200
-	  smult 40
+	  smult 100
 	  samples (max smin (min smax (int (* (poly-foldness wpoints) smult))))]
       (.draw g (.createTransformedShape (.xform-to-view @view)
 					(de-casteljau wpoints samples))))))

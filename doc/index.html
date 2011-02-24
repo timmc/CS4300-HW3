@@ -14,11 +14,65 @@
 <h1>Overview</h1>
 
 <p>This application provides a canvas on which to draw a higher-order
-Bézier curve by successively defining the vertices of its control polygon.</p>
+<a href="https://secure.wikimedia.org/wikipedia/en/wiki/B%C3%A9zier_curve">Bézier curve</a>
+by successively defining the vertices of its control polygon.</p>
+
+<h1>Requirements</h1>
+
+<p>You will need a Java runtime environment on your system,
+preferably Sun Java v1.6 ("Java 6") or higher.
+The application has not been tested with other versions or manufacturers.
+Additionally, be sure to download or compile the appropriate JAR file for
+your system&mdash;32-bit and 64-bit Java do not work together.</p>
 
 <h1>Running</h1>
 
-<p></p>
+<p>Run the <tt>timmc.HW3-standalone.jar</tt> file by double-clicking on it
+or by running <tt>java -jar timmc.HW3-standalone.jar</tt> from
+the parent directory on the command line.</p>
+
+<h1>Usage</h1>
+
+<img id="screencap-main" src="screencap-main.png"
+     alt="Screen capture of program in use.">
+
+<p>At right is a representative screen capture of the application in use.
+The tool panel on the left portion of the window contains a set of viewport
+positioning tools, and the remaining space to the right is a canvas on which
+you may create and modify Bézier curves. There is also a menubar at the top.</p>
+
+<p>Single clicks on the canvas produce new vertices (drawn in green)
+that are appended to the end of the control polyline (or "polygon".)
+The polyline is drawn in blue. (Full color vision is not required to use this
+application; the colors are mentioned here for ease of discussion only.)
+When there are more than 2 vertices on the polyline, the resulting Bézier curve
+is drawn onto the canvas (in red) using de Casteljau's algorithm.
+Existing points may be dragged across the canvas to reposition them,
+and the entire image is updated in realtime during the action.</p>
+
+<p>Addition and repositioning of vertices may both be undone and redone in the
+standard fashion. The Spline menu contains Undo and Redo buttons and shows their
+keyboard shortcuts.</p>
+
+<p>The viewport may be rotated or zoomed using the spinners in the Position
+panel. If you lose track of the curve by zooming in too far, the Best Fit
+button will reposition the viewport to show the polygon again.</p>
+
+<p>Although there is not yet a render/export feature, the View menu does
+contain a toggle with which to hide the control polygon. Screen captures may
+then be taken with standard software.</p>
+
+<p>You may exit the program by closing the window, using the Spline -&gt; Exit
+menu item, or using the menu item's keyboard shortcut.</p>
+
+<h1>Known bugs</h1>
+
+<ul>
+  <li>Zooming in to 7.5 or higher can produce jagged curves</li>
+  <li>Using Best Fit when all vertices are exactly on the same vertical
+      or horizontal can throw the program into an unusable state, although
+      Exit will still work.</li>
+</ul>
 
 <h1>Future work</h1>
 
