@@ -1,9 +1,9 @@
 # Overview
 
-<TODO>
-
 The code is written in Clojure, a Lisp that targets the JVM, and uses the Java
 AWT packages for windowing and 2D graphics.
+
+A user manual is present in ./doc/index.html.
 
 # Compilation
 
@@ -16,15 +16,13 @@ Invoke ./run.sh to execute HW3.
 
 # Known bugs
 
-<TODO>
+None known, though several anticipated features are missing.
 
 # Extra credit
 
-<TODO>
+None listed.
 
 # Third-party credit
 
-* Leiningen build tool
-* Clojure standard libraries
-* Java standard libraries
+No external code was incorporated into this project.
 

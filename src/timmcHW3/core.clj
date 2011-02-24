@@ -450,7 +450,7 @@
 (defn canvas-wheel-moved
   [^MouseWheelEvent e]
   (register-mouse-loc! e)
-  );TODO
+  );TODO: scroll wheel zooms by adjusting zoom spinner
 
 ;;;-- Components --;;;
 
