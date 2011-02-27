@@ -8,11 +8,14 @@
 ;;; Error checking only to prevent cycles in the graph, nothing more.
 
 (deftest bad-create
-  (is (thrown-with-msg? Exception #"triplet" (create :foo nil))))
+  (is (thrown-with-msg? Exception #"triplet"
+	(create :foo nil))))
 
 (deftest bad-add
-  (is (thrown-with-msg? Exception #"does not exist" (add (create) :foo #() [:bar])))
-  (is (thrown-with-msg? Exception #"already exists" (add (create :foo nil false) :foo nil true))))
+  (is (thrown-with-msg? Exception #"does not exist"
+	(add (create) :foo #() [:bar])))
+  (is (thrown-with-msg? Exception #"already exists"
+	(add (create :foo nil false) :foo nil true))))
   
 
 (deftest explicit-state
