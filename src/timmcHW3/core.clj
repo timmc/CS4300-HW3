@@ -382,13 +382,14 @@
 (defn do-best-fit
   "If possible, bring the view into best fit around the curve."
   []
-  (dosync
-   (when (curve-has-extent?)
-     (let [best (calc-best-fit)]
-       (rassoc *view* [:rot-center] (:rot-center best))
-       (.setValue (.spinner-zoom @*gui*)
-                  (minspect-to-zoom (:view-minspect best)))
-       (dirty! :pose :pose-spinners)))))
+  (->>
+   (dosync
+    (when (curve-has-extent?)
+      (let [best (calc-best-fit)]
+        (rassoc *view* [:rot-center] (:rot-center best))
+        (dirty! :pose :pose-spinners)
+        (minspect-to-zoom (:view-minspect best)))))
+   (.setValue (.spinner-zoom @*gui*))))
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
