@@ -278,11 +278,12 @@
   "Check which vertex is hovered."
   []
   (dosync
-   (let [curX (.mouseX ^ProgState @*state*)
-         curY (.mouseY ^ProgState @*state*)
-         hovered (first (filter #(pick-vertex? curX curY (loc-to-view %))
-                                (.curve ^UserData @*udata*)))]
-     (rassoc *state* [:hover-vertex] hovered))))
+   (rassoc *state* [:hover-vertex]
+           (or (.drag-vertex @*state*)
+               (let [curX (.mouseX ^ProgState @*state*)
+                     curY (.mouseY ^ProgState @*state*)]
+                 (first (filter #(pick-vertex? curX curY (loc-to-view %))
+                                (.curve ^UserData @*udata*))))))))
 
 ;;;-- Rendering --;;;
 
