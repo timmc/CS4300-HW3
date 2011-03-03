@@ -30,17 +30,30 @@
 
 ;;;-- Utility --;;;
 
-(defn assoc-in-ref!
-  "Update an associative ref with a new value given a key vector.
+(defn rassoc
+  "Use assoc-in on the contents of a ref, effectively.
    Evals to true if changed, false otherwise."
-  [aref ks v]
-  (let [old-val (get-in0 @aref ks)]
-    (if (= v old-val)
-      false
-      (dosync
-       (ref-set aref (assoc-in0 @aref ks v))
-       true))))
+  [r ks v]
+  (dosync
+   (let [old-val (get-in0 @r ks)]
+     (if (= v old-val)
+       false
+       (do
+         (ref-set r (assoc-in0 @r ks v))
+         true)))))
 
+(defn rupdate
+  "Use update-in on the contents of a ref, effectively.
+   Evals to true if changed, false otherwise."
+  [r ks f & args]
+  (dosync
+   (let [old-val (get-in0 @r ks)
+         new-val (apply f old-val args)]
+     (if (= new-val old-val)
+       false
+       (do
+         (ref-set r (assoc-in0 @r ks new-val))
+         true)))))
 
 ;;; This is done as a macro in order to preserve type hinting.
 (defmacro create!

@@ -106,8 +106,8 @@
   (dosync
    (let [[w h] (de-dim (.viewport-dim @*view*))
          at (calc-xform w h)]
-     (assoc-in-ref! *view* [:xform-to-view] at)
-     (assoc-in-ref! *view* [:xform-from-view] (.createInverse at)))))
+     (rassoc *view* [:xform-to-view] at)
+     (rassoc *view* [:xform-from-view] (.createInverse at)))))
 
 (defn update-canvas-shape!
   "Update variables that depend on the canvas size or other state."
@@ -115,9 +115,9 @@
   (dosync
    (let [dim (.getSize (.canvas @*gui*))
          [dim-w dim-h] (de-dim dim)]
-     (assoc-in-ref! *view* [:view-center]
+     (rassoc *view* [:view-center]
                     (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
-     (assoc-in-ref! *view* [:viewport-dim] dim))))
+     (rassoc *view* [:viewport-dim] dim))))
 
 (defn update-pose!
   "Update view based on current state of Pose spinners."
@@ -125,8 +125,8 @@
   (dosync
    (let [rot (double (.getValue (.spinner-rot @*gui*)))
          minspect (zoom-to-minspect (.getValue (.spinner-zoom @*gui*)))]
-     (assoc-in-ref! *view* [:view-rot] rot)
-     (assoc-in-ref! *view* [:view-minspect] minspect))))
+     (alter *view* assoc :view-rot rot)
+     (alter *view* assoc :view-minspect minspect))))
 
 ;;;-- User data modifiers --;;;
 
@@ -134,9 +134,20 @@
   "Add a vertex to the curve."
   [^Point2D wp]
   (dosync
-   (assoc-in-ref! *udata* [:curve]
-                  (conj (.curve @*udata*) wp))
+   (rupdate *udata* [:curve] conj wp)
    (dirty! :udata)))
+
+(defn replace-1
+  "Replace the first x in coll such that (pred x) is true with (gen x).
+   Not tail-recursive."
+  [coll pred gen]
+  (if (seq coll)
+    (if (pred (first coll))
+      (conj (rest coll)
+            (gen (first coll)))
+      (conj (replace-1 (rest coll) pred gen)
+            (first coll)))
+    coll))
 
 (defn replace-vertex!
   "Replace an old world-vertex with a new one, mark dirty."
@@ -144,10 +155,10 @@
   (when (nil? new)
     (throw (IllegalArgumentException. "Given nil replacement vertex.")))
   (dosync
-   ;;; (into [] ...) keeps it a vector, and in the right order 
-   (assoc-in-ref! *udata* [:curve]
-                  (into [] (map #(if (identical? % old) new %)
-                                (.curve @*udata*))))
+   ;;; Might consider (replace (IdentityHashMap. {d0 d1}) [3 4 d0 5])
+   ;;; NB: Ensure that result is a vector, and not reversed.
+   (rupdate *udata* [:curve]
+            (comp vec replace-1) (partial identical? old) (constantly new))
    (dirty! :udata)))
 
 ;;;-- History --;;;
@@ -177,7 +188,7 @@
    displayed to the user as the name of the action that produced this state."
   [^String actname]
   (dosync
-   (assoc-in-ref! *udata* [:act] actname)
+   (rassoc *udata* [:act] actname)
    (ref-set *history* (hist/act @*history* @*udata*))
    (dirty! :history-gui)))
 
@@ -185,7 +196,7 @@
   "Cancel any in-progress commands and temporary state."
   []
   (dosync
-   (assoc-in-ref! *state* [:drag-vertex] nil)
+   (rassoc *state* [:drag-vertex] nil)
    (ref-set *udata* (hist/current @*history*))
    (dirty! :udata)))
 
@@ -243,12 +254,15 @@
   "Compute the degree to which a polyline (2+ vertices) is folded up in
    its bounding box."
   [points]
-  #_1 ; constant factor does not work -- gets choppy with >10 vertices
-  #_(Math/sqrt (count points)) ; gets choppy a bit more slowly
+  ;; constant factor does not work -- gets choppy with >10 vertices
+  #_1
+  ;; gets choppy a bit more slowly
+  #_(Math/sqrt (count points))
+  ;; much better, though should be used with a higher multiplier
   (let [bounds ^Rectangle2D (poly-bounds points)
         epsilon 0.001] ; a small value is added to prevent div by zero
     (/ (poly-len points)
-       (+ (.width bounds) (.height bounds) epsilon)) ; much better, though should be used with a higher multiplier
+       (+ (.width bounds) (.height bounds) epsilon))
     ))
 
 (def ^{:doc "Radius (in view) for picking a point."} pick-radius 3)
@@ -268,7 +282,7 @@
          curY (.mouseY ^ProgState @*state*)
          hovered (first (filter #(pick-vertex? curX curY (loc-to-view %))
                                 (.curve ^UserData @*udata*)))]
-     (assoc-in-ref! *state* [:hover-vertex] hovered))))
+     (rassoc *state* [:hover-vertex] hovered))))
 
 ;;;-- Rendering --;;;
 
@@ -325,7 +339,7 @@
   "Determine mode from user data state."
   []
   (dosync
-   (assoc-in-ref! *state* [:mode]
+   (rassoc *state* [:mode]
                   (if (< (count (.curve ^UserData @*udata*)) 4)
                     :extend0
                     :extend1))))
@@ -346,7 +360,7 @@
   (dosync
    (when (hist-when @*history*)
      (cancel-action!)
-     (assoc-in-ref! *history* [] (hist-mod @*history*))
+     (alter *history* hist-mod)
      (ref-set *udata* (hist/current @*history*))
      (dirty! :history-gui :udata))))
 
@@ -371,8 +385,9 @@
   (dosync
    (when (curve-has-extent?)
      (let [best (calc-best-fit)]
-       (assoc-in-ref! *view* [:rot-center] (:rot-center best))
-       (.setValue (.spinner-zoom @*gui*) (minspect-to-zoom (:view-minspect best)))
+       (rassoc *view* [:rot-center] (:rot-center best))
+       (.setValue (.spinner-zoom @*gui*)
+                  (minspect-to-zoom (:view-minspect best)))
        (dirty! :pose :pose-spinners)))))
 
 (defn do-maybe-exit
@@ -384,8 +399,8 @@
   "Make note of new mouse location, dirty if changed."
   ([x y]
      (dosync
-      (when (or (assoc-in-ref! *state* [:mouseX] x)
-                (assoc-in-ref! *state* [:mouseY] y))
+      (when (or (rassoc *state* [:mouseX] x)
+                (rassoc *state* [:mouseY] y))
         (dirty! :mouse-pos))))
   ([^MouseEvent e]
      (register-mouse-loc! (.getX e) (.getY e))))
@@ -416,41 +431,42 @@
   [^MouseEvent e]
   (register-mouse-loc! e) ; TODO cancel any in-progress dragging?
   (clean! :hover)
-  (when (show-control-poly?)
-    (dosync
-     (assoc-in-ref! *state* [:drag-vertex] (.hover-vertex @*state*)))))
+  (dosync
+   (when (show-control-poly?)
+     (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))))
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (register-mouse-loc! e)
-  (when (show-control-poly?)
-    (dosync
+  (dosync
+   (when (show-control-poly?)
      (let [old-drag (.drag-vertex @*state*)]
        (if (nil? old-drag)
          (do
            (clean! :hover)
-           (assoc-in-ref! *state* [:drag-vertex] (.hover-vertex @*state*)))
+           (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))
          (do
            (let [new-drag (loc-from-view (Point2D$Double. (.getX e) (.getY e)))]
-             (assoc-in-ref! *state* [:drag-vertex] new-drag)
-             (assoc-in-ref! *state* [:hover-vertex] new-drag)
+             (rassoc *state* [:drag-vertex] new-drag)
+             (rassoc *state* [:hover-vertex] new-drag)
              (replace-vertex! old-drag new-drag))))))))
 
 (defn canvas-mouse-released
   "In some cases the end of a drag."
   [^MouseEvent e]
   (register-mouse-loc! e)
-  (when-not (nil? (.drag-vertex @*state*))
-    (save-action! "drag vertex")
-    (assoc-in-ref! *state* [:drag-vertex] nil)
-    (dirty! :painting))) ;TODO draw ghost of original during drag
+  (dosync
+   (when-not (nil? (.drag-vertex @*state*))
+     (save-action! "drag vertex")
+     (rassoc *state* [:drag-vertex] nil)
+     (dirty! :painting)))) ;TODO draw ghost of original during drag
 
 (defn canvas-mouse-exited
   []
   (dosync
-   (assoc-in-ref! *state* [:mouseX] -1)
-   (assoc-in-ref! *state* [:mouseY] -1)
-   (assoc-in-ref! *state* [:hover-vertex] nil)
+   (rassoc *state* [:mouseX] -1)
+   (rassoc *state* [:mouseY] -1)
+   (rassoc *state* [:hover-vertex] nil)
    (dirty! :hover)))
 
 (defn canvas-wheel-moved
