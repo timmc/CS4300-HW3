@@ -161,8 +161,8 @@
   [cascade & nodes]
   (when-not (set/superset? (set (keys cascade)) nodes)
     (throw (IllegalArgumentException.
-	    (apply str "Nodes do not exist in cascade: "
-		   (set/difference nodes (keys cascade))))))
+	    ^String (apply str "Nodes do not exist in cascade: "
+			   (set/difference nodes (keys cascade))))))
   (dirty-set cascade (into #{} nodes)))
 
 (defn- to-clean*

@@ -10,6 +10,10 @@ test:
 run:
 	lein run
 
+reflections:
+	lein clean
+	lein compile | sed 's|Reflection warning, ||' | sed "s| can't be resolved\\.||"
+
 todo:
 	grep 'TODO' -nR */ || true
 	grep 'FIXME' -nR */ || true

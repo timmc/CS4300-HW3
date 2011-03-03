@@ -52,12 +52,12 @@
 (defn curve-has-extent?
   "Return true if we can define the size of the control polygon."
   []
-  (>= (count (.curve @*udata*)) 2))
+  (>= (count (.curve ^UserData @*udata*)) 2))
 
 (defn at-least-cubic?
   "Return true if we are showing enough points to draw a non-trivial curve."
   []
-  (>= (count (.curve @*udata*)) 3))
+  (>= (count (.curve ^UserData @*udata*)) 3))
 
 (defn show-control-poly?
   "Check whether we are showing the control polygon."
@@ -91,7 +91,7 @@
   [view-w view-h]
   (dosync
    (let [[drag-x drag-y] (de-pt (.rot-center @*view*))
-         minspect (min view-w view-h)
+         minspect (min view-w view-h)         
          magnification (/ minspect (.view-minspect @*view*))]
      (doto (AffineTransform.)
        (.translate (/ view-w 2) (/ view-h 2))
@@ -115,7 +115,8 @@
   (dosync
    (let [dim (.getSize (.canvas @*gui*))
          [dim-w dim-h] (de-dim dim)]
-     (assoc-in-ref! *view* [:view-center] (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
+     (assoc-in-ref! *view* [:view-center]
+                    (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
      (assoc-in-ref! *view* [:viewport-dim] dim))))
 
 (defn update-pose!
@@ -202,7 +203,8 @@
               (.getX p1) (.getY p1)
               (.getX p2) (.getY p2)
               (.getX p3) (.getY p3))
-    (.createTransformedShape ^AffineTransform (.xform-to-view @*view*) path)))
+    (.createTransformedShape
+     ^AffineTransform (.xform-to-view ^Viewpoint @*view*) path)))
 
 (defn ^Point2D transform
   "Transform a location from one coordinate system to another."
@@ -214,12 +216,12 @@
 (defn ^Point2D loc-to-view
   "Transform a location from world to viewport coords."
   [& args]
-  (apply transform (.xform-to-view @*view*) args))
+  (apply transform (.xform-to-view ^Viewpoint @*view*) args))
 
 (defn ^Point2D loc-from-view
   "Transform a location from viewport to world coords."
   [& args]
-  (apply transform (.xform-from-view @*view*) args))
+  (apply transform (.xform-from-view ^Viewpoint @*view*) args))
 
 (defn poly-len
   "Calculate the line length of a polyline (2+ vertices) of Point2Ds."
@@ -229,8 +231,8 @@
 (defn poly-bounds
   "Calculate the bounding Rectangle2D of a polyline (1+ vertices) in its native coordinate frame."
   [points]
-  (let [xs (map #(.getX %) points)
-        ys (map #(.getY %) points)
+  (let [xs (map #(.getX ^Point2D %) points)
+        ys (map #(.getY ^Point2D %) points)
         xmin (apply min xs)
         xmax (apply max xs)
         ymin (apply min ys)
@@ -243,7 +245,7 @@
   [points]
   #_1 ; constant factor does not work -- gets choppy with >10 vertices
   #_(Math/sqrt (count points)) ; gets choppy a bit more slowly
-  (let [^Rectangle2D bounds (poly-bounds points)
+  (let [bounds ^Rectangle2D (poly-bounds points)
         epsilon 0.001] ; a small value is added to prevent div by zero
     (/ (poly-len points)
        (+ (.width bounds) (.height bounds) epsilon)) ; much better, though should be used with a higher multiplier
@@ -255,17 +257,17 @@
   "Determine if the (view) cursor is within a square picking radius of
    a (view) vertex."
   ([vx, vy, ^Point2D vvertex]
-     (and (<= (Math/abs (- (.getX vvertex) vx)) pick-radius)
-          (<= (Math/abs (- (.getY vvertex) vy)) pick-radius))))
+     (and (<= (Math/abs ^Double (- (.getX vvertex) vx)) pick-radius)
+          (<= (Math/abs ^Double (- (.getY vvertex) vy)) pick-radius))))
 
 (defn update-hover!
   "Check which vertex is hovered."
   []
   (dosync
-   (let [curX (.mouseX @*state*)
-         curY (.mouseY @*state*)
+   (let [curX (.mouseX ^ProgState @*state*)
+         curY (.mouseY ^ProgState @*state*)
          hovered (first (filter #(pick-vertex? curX curY (loc-to-view %))
-                                (.curve @*udata*)))]
+                                (.curve ^UserData @*udata*)))]
      (assoc-in-ref! *state* [:hover-vertex] hovered))))
 
 ;;;-- Rendering --;;;
@@ -287,7 +289,9 @@
   [^Graphics2D g, wpoints]
   (when (show-control-poly?)
     (draw-control-segments g (map loc-to-view wpoints))
-    (draw-control-points g wpoints (.xform-to-view @*view*) (.hover-vertex @*state*)))
+    (draw-control-points g wpoints
+                         (.xform-to-view ^Viewpoint @*view*)
+                         (.hover-vertex ^ProgState @*state*)))
   (when (at-least-cubic?)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
@@ -295,42 +299,42 @@
           smax 200
           smult 100
           samples (max smin (min smax (int (* (poly-foldness wpoints) smult))))]
-      (.draw g (.createTransformedShape (.xform-to-view @*view*)
+      (.draw g (.createTransformedShape (.xform-to-view ^Viewpoint @*view*)
                                         (de-casteljau wpoints samples))))))
 
 (defn render
   "Draw the world."
   [^Graphics2D g]
-  (let [[w h] (de-dim (.viewport-dim @*view*))
-        [cx cy] (de-pt (.view-center @*view*))]
+  (let [[w h] (de-dim (.viewport-dim ^Viewpoint @*view*))
+        [cx cy] (de-pt (.view-center ^Viewpoint @*view*))]
     (doto g
       (.setRenderingHint RenderingHints/KEY_ANTIALIASING
                          RenderingHints/VALUE_ANTIALIAS_ON)
       (.setColor (Color. 50 50 50))
       (.fill (Rectangle2D$Double. 0 0 w h))))
-  (draw-curve g (.curve @*udata*)))
+  (draw-curve g (.curve ^UserData @*udata*)))
 
 ;;;-- GUI --;;;
 
 (defn ask-redraw
   "Ask for the canvas to be redrawn."
   []
-  (.repaint (.canvas @*gui*)))
+  (.repaint (.canvas ^GUI @*gui*)))
 
 (defn update-mode!
   "Determine mode from user data state."
   []
   (dosync
    (assoc-in-ref! *state* [:mode]
-                  (if (< (count (.curve @*udata*)) 4)
+                  (if (< (count (.curve ^UserData @*udata*)) 4)
                     :extend0
                     :extend1))))
 
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
   []
-  (.setEnabled (.button-fit @*gui*) (curve-has-extent?))
-  (.setEnabled (.mi-view-control @*gui*) (at-least-cubic?)))
+  (.setEnabled (.button-fit ^GUI @*gui*) (curve-has-extent?))
+  (.setEnabled (.mi-view-control ^GUI @*gui*) (at-least-cubic?)))
 
 ;;;-- Event handlers --;;;
 
