@@ -404,6 +404,10 @@
 
 ;;; clean! will be called by relying code
 
+(defmulti ^Point2D loc "Get view location." class)
+(defmethod loc Point2D [p] p)
+(defmethod loc MouseEvent [e] (Point2D$Double. (.getX e) (.getY e)))
+
 (defn canvas-mouse-clicked
   "A click event has occurred on the canvas."
   [^MouseEvent e]
@@ -433,19 +437,22 @@
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
+  ;;TODO: calculate movement distance here
   (register-mouse-loc! e)
   (dosync
    (when (show-control-poly?)
-     (let [old-drag (.drag-vertex @*state*)]
-       (if (nil? old-drag)
-         (do
-           (clean! :hover)
-           (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))
-         (do
-           (let [new-drag (loc-from-view (Point2D$Double. (.getX e) (.getY e)))]
-             (rassoc *state* [:drag-vertex] new-drag)
-             (rassoc *state* [:hover-vertex] new-drag)
-             (replace-vertex! old-drag new-drag))))))))
+     (if-let [old-drag (.drag-vertex @*state*)]
+       (do
+         ;;TODO: This makes the vertex jump to be centered on the pointer.
+         (let [new-drag (loc-from-view (loc e))]
+           (rassoc *state* [:drag-vertex] new-drag)
+           (replace-vertex! old-drag new-drag)))
+       (do
+         (clean! :hover)
+         (if-let [hover (.hover-vertex @*state*)]
+           (do (rassoc *state* [:drag-vertex] hover)
+               (dirty! :mode))
+           (comment "TODO: drag canvas")))))))
 
 (defn canvas-mouse-released
   "In some cases the end of a drag."
