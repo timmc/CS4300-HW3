@@ -265,7 +265,7 @@
        (+ (.width bounds) (.height bounds) epsilon))
     ))
 
-(def ^{:doc "Radius (in view) for picking a point."} pick-radius 3)
+(def ^{:doc "Radius (in view) for picking a point."} pick-radius 5)
 
 (defn pick-vertex?
   "Determine if the (view) cursor is within a square picking radius of
@@ -287,14 +287,6 @@
 
 ;;;-- Rendering --;;;
 
-(defn test-draw-point
-  "Draw a test point at the given coords."
-  [^Graphics2D g, ^Color c, wx, wy]
-  (let [[vx vy] (de-pt (loc-to-view wx wy))]
-    (doto g
-      (.setPaint c)
-      (.fill (Rectangle2D$Double. (- vx 3) (- vy 3) 6 6)))))
-
 (def ^Color curve-color Color/RED)
 (def ^BasicStroke curve-stroke
   (BasicStroke. (float 2.5) BasicStroke/CAP_ROUND BasicStroke/JOIN_ROUND))
@@ -303,10 +295,11 @@
   "Draw a potentially incomplete curve."
   [^Graphics2D g, wpoints]
   (when (show-control-poly?)
-    (draw-control-segments g (map loc-to-view wpoints))
-    (draw-control-points g wpoints
-                         (.xform-to-view ^Viewpoint @*view*)
-                         (.hover-vertex ^ProgState @*state*)))
+    (let [vpoints (map loc-to-view wpoints)]
+      (draw-control-segments g vpoints)
+      (draw-control-points g vpoints)
+      (when-let [hover (.hover-vertex ^ProgState @*state*)]
+        (draw-hover g (loc-to-view hover)))))
   (when (at-least-cubic?)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
@@ -422,7 +415,8 @@
               (show-control-poly?)
               (not= (.mode @*state*) :manipulate))
      (append-vertex! (loc-from-view (.getX e) (.getY e)))
-     (save-action! "add vertex"))))
+     (save-action! "add vertex")
+     (dirty! :hover))))
 
 (defn canvas-mouse-moved
   [^MouseEvent e]

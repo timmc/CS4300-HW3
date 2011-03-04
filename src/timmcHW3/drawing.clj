@@ -37,15 +37,26 @@
 	(.draw g (Line2D$Double. prev cur))
 	(recur cur (next remain))))))
 
+(defn- draw-dot
+  "Draw a dot at the specified view coordinates using given color and radius."
+  [^Graphics2D g, ^Color c, ^Integer radius, ^Point2D vp]
+  (let [[vx vy] (de-pt vp)
+        dia (* 2 radius)]
+    (doto g
+      (.setColor c)
+      (.fill (Ellipse2D$Double. (- vx radius) (- vy radius) dia dia)))))
+
 (def ^Color vertex-color Color/GREEN)
-(def ^Color picked-color Color/WHITE)
+(def ^int vertex-radius 3)
+(def ^Color hover-color Color/GREEN)
+(def ^int hover-radius 5)
 
 (defn draw-control-points
-  "Draw vertices of a control polygon. Specified in world coordinates."
-  [^Graphics2D g, wpoints, ^AffineTransform to-view, ^Point2D picked]
-  (doseq [p wpoints]
-    (let [[vcx vcy] (de-pt (.transform to-view p nil))
-	  color (if (identical? p picked) picked-color vertex-color)]
-      (.setColor g color)
-      (.fill g (Ellipse2D$Double. (- vcx 3) (- vcy 3) 6 6)))))
+  "Draw vertices of a control polygon. Specified in view coordinates."
+  [^Graphics2D g, vpoints]
+  (dorun (map (partial draw-dot g vertex-color vertex-radius) vpoints)))
 
+(defn draw-hover
+  "Draw the currently hovered vertex (in view coords) of a control polygon."
+  [^Graphics2D g, ^Point2D vp]
+  (draw-dot g hover-color hover-radius vp))
