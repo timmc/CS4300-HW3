@@ -275,7 +275,7 @@
           (<= (Math/abs ^Double (- (.getY vvertex) vy)) pick-radius))))
 
 (defn update-hover!
-  "Check which vertex is hovered."
+  "Check which vertex is hovered, starting with latest."
   []
   (dosync
    (rassoc *state* [:hover-vertex]
@@ -283,7 +283,7 @@
                (let [curX (.mouseX ^ProgState @*state*)
                      curY (.mouseY ^ProgState @*state*)]
                  (first (filter #(pick-vertex? curX curY (loc-to-view %))
-                                (.curve ^UserData @*udata*))))))))
+                                (rseq (.curve ^UserData @*udata*)))))))))
 
 ;;;-- Rendering --;;;
 
