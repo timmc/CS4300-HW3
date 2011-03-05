@@ -1,15 +1,46 @@
 (ns timmcHW3.gui
   "Interface constructors."
   (:use timmcHW3.utils)
-  (:require timmcHW3.state)
-  (:import [timmcHW3.state GUI])
   (:import
    [java.awt Dimension Graphics2D Component BorderLayout]
+   [java.awt.event ActionListener]
    [javax.swing BoxLayout BorderFactory
     JFrame JComponent JPanel JMenu JMenuBar JMenuItem JCheckBoxMenuItem
     JButton JLabel JSpinner SpinnerNumberModel JSpinner$NumberEditor
     KeyStroke]
    [javax.swing.border Border EtchedBorder]))
+
+(defrecord ^{:doc "GUI components."}
+    GUI
+  [^{:doc "Application window." :tag JFrame}
+   frame
+   ^{:doc "Toolbox buttons." :tag JPanel}
+   controls
+   ^{:doc "Drawing canvas." :tag JComponent}
+   canvas
+   ^{:doc "Application menubar." :tag JMenuBar}
+   menu
+   ^{:doc "Clear the board." :tag JMenuItem}
+   mi-clear
+   ^{:doc "Undo last action." :tag JMenuItem}
+   mi-undo
+   ^{:doc "Redo action." :tag JMenuItem}
+   mi-redo
+   ^{:doc "Exit app." :tag JMenuItem}
+   mi-exit
+   ^{:doc "Show/hide control polygon." :tag JCheckBoxMenuItem}
+   mi-view-control
+   ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
+   spinner-rot
+   ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
+   spinner-zoom
+   ^{:doc "Button to zoom to extent of curve." :tag JButton}
+   button-fit
+   ])
+
+(defn ^GUI make-blank-GUI
+  []
+  (GUI. nil nil nil nil nil nil nil nil nil nil nil nil))
 
 ;;;-- Utilities --;;;
 
@@ -148,5 +179,14 @@
       (.add (create! rgui [:controls] new-controls rgui) BorderLayout/LINE_START)
       (.add (create! rgui [:canvas] new-canvas rgui renderer) BorderLayout/CENTER)
       (.pack))))
+
+(defn add-action-handler
+  "Add an action listener to the GUI component.
+   The thunk is called with no arguments."
+  [^Component c, f]
+  (doto c
+    (.addActionListener
+     (proxy [ActionListener] []
+       (actionPerformed [_] (f))))))
 
 ;;;TODO add statusbar

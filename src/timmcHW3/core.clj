@@ -1,12 +1,12 @@
 (ns timmcHW3.core
   "Core code. Use -main."
-  (:use
-   [timmcHW3.utils]
-   [timmcHW3.drawing]
-   [timmcHW3.gui])
+  (:use [timmcHW3.utils])
   (:import [timmcHW3.utils Vec2])
+  (:use [timmcHW3.drawing])
+  (:use [timmcHW3.gui])
+  (:import [timmcHW3.gui GUI])
   (:use timmcHW3.state)
-  (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
+  (:import [timmcHW3.state Viewpoint ProgState UserData])
   (:require [timmcHW3.cascade :as dirt])
   (:require [timmcHW3.history :as hist])
   (:import
@@ -18,7 +18,7 @@
    [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
     Line2D Line2D$Double Rectangle2D Rectangle2D$Double
     Ellipse2D Ellipse2D$Double]
-   [java.awt.event ActionListener ComponentAdapter
+   [java.awt.event ComponentAdapter
     MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
   (:gen-class))
 
@@ -496,15 +496,6 @@
   );TODO: scroll wheel zooms by adjusting zoom spinner
 
 ;;;-- Components --;;;
-
-(defn add-action-handler
-  "Add an action listener to the GUI component.
-   The thunk is called with no arguments."
-  [^Component c, f]
-  (doto c
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_] (f))))))
 
 (defn enliven!
   "Add action listeners to GUI components."

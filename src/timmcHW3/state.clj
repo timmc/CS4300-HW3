@@ -2,42 +2,7 @@
   "State records."
   (:import
    [java.awt Dimension]
-   [java.awt.geom AffineTransform Point2D]
-   [javax.swing JFrame JComponent JPanel
-    JMenu JMenuBar JMenuItem JCheckBoxMenuItem
-    JSpinner JButton]))
-
-(defrecord ^{:doc "GUI components."}
-    GUI
-  [^{:doc "Application window." :tag JFrame}
-   frame
-   ^{:doc "Toolbox buttons." :tag JPanel}
-   controls
-   ^{:doc "Drawing canvas." :tag JComponent}
-   canvas
-   ^{:doc "Application menubar." :tag JMenuBar}
-   menu
-   ^{:doc "Clear the board." :tag JMenuItem}
-   mi-clear
-   ^{:doc "Undo last action." :tag JMenuItem}
-   mi-undo
-   ^{:doc "Redo action." :tag JMenuItem}
-   mi-redo
-   ^{:doc "Exit app." :tag JMenuItem}
-   mi-exit
-   ^{:doc "Show/hide control polygon." :tag JCheckBoxMenuItem}
-   mi-view-control
-   ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
-   spinner-rot
-   ^{:doc "Spinner for degree of zoom, using default zoom 1. Double mag by adding 0.1." :tag JSpinner}
-   spinner-zoom
-   ^{:doc "Button to zoom to extent of curve." :tag JButton}
-   button-fit
-   ])
-
-(defn ^GUI make-blank-GUI
-  []
-  (GUI. nil nil nil nil nil nil nil nil nil nil nil nil))
+   [java.awt.geom AffineTransform Point2D]))
 
 (defrecord ^{:doc "Viewport state."}
     Viewpoint
