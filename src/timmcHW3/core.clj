@@ -50,6 +50,12 @@
 
 ;;;-- Mode accessors --;;;
 
+;;; TODO: Move these to state.clj?
+(defn user-has-data?
+  "Return true if user data is not empty."
+  []
+  (pos? (count (.curve ^UserData @*udata*))))
+
 (defn curve-has-extent?
   "Return true if we can define the size of the control polygon."
   []
@@ -337,10 +343,19 @@
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
   []
+  (.setEnabled (.mi-clear ^GUI @*gui*) (user-has-data?))
   (.setEnabled (.button-fit ^GUI @*gui*) (curve-has-extent?))
   (.setEnabled (.mi-view-control ^GUI @*gui*) (at-least-cubic?)))
 
 ;;;-- Event handlers --;;;
+
+(defn do-clear
+  "Clear all user data."
+  []
+  (dosync
+   (cancel-action!)
+   (rassoc *udata* [:curve] [])
+   (save-action! "clear")))
 
 (defn do-history!
   "If (hist-when *history*) returns true, uses (hist-mod *history*) to get
@@ -485,6 +500,12 @@
 (defn enliven!
   "Add action listeners to GUI components."
   [rgui]
+  (doto (.mi-clear @rgui)
+    (.addActionListener
+     (proxy [ActionListener] []
+       (actionPerformed [_]
+         (do-clear)
+         (clean!)))))
   (doto (.mi-undo @rgui)
     (.addActionListener
      (proxy [ActionListener] []

@@ -41,25 +41,30 @@
 ;;; We define these in functions so they are not created at compile-time.
 ;;; These methods each take a ref to a GUI record that they can add their components to.
 
+(defn- ^JMenuItem new-mi-clear
+  []
+  (doto (JMenuItem. "Clear")
+    (.setEnabled false)))
+
 (defn- ^JMenuItem new-mi-undo
-  [rgui]
+  []
   (doto (JMenuItem. "Undo")
     (.setEnabled false)
     (.setAccelerator (KeyStroke/getKeyStroke "ctrl Z"))))
 
 (defn- ^JMenuItem new-mi-redo
-  [rgui]
+  []
   (doto (JMenuItem. "Redo")
     (.setEnabled false)
     (.setAccelerator (KeyStroke/getKeyStroke "ctrl Y"))))
 
 (defn- ^JMenuItem new-mi-exit
-  [rgui]
+  []
   (doto (JMenuItem. "Exit")
     (.setAccelerator (KeyStroke/getKeyStroke "ctrl Q"))))
 
 (defn- ^JCheckBoxMenuItem new-mi-view-control
-  [rgui]
+  []
   (doto (JCheckBoxMenuItem. "Show control polygon" true)
     (.setAccelerator (KeyStroke/getKeyStroke "ctrl P"))))
 
@@ -68,11 +73,12 @@
   [rgui]
   (doto (JMenuBar.)
     (.add (doto (JMenu. "Spline")
-	    (.add (create! rgui [:mi-undo] new-mi-undo rgui))
-	    (.add (create! rgui [:mi-redo] new-mi-redo rgui))
-	    (.add (create! rgui [:mi-exit] new-mi-exit rgui))))
+            (.add (create! rgui [:mi-clear] new-mi-clear))
+	    (.add (create! rgui [:mi-undo] new-mi-undo))
+	    (.add (create! rgui [:mi-redo] new-mi-redo))
+	    (.add (create! rgui [:mi-exit] new-mi-exit))))
     (.add (doto (JMenu. "View")
-	    (.add (create! rgui [:mi-view-control] new-mi-view-control rgui))))))
+	    (.add (create! rgui [:mi-view-control] new-mi-view-control))))))
 
 (defn- ^JSpinner new-pose-rotate
   "Make the spinner for viewpoint rotation."

@@ -17,13 +17,15 @@
    canvas
    ^{:doc "Application menubar." :tag JMenuBar}
    menu
-   ^{:doc "Undo menu item." :tag JMenuItem}
+   ^{:doc "Clear the board." :tag JMenuItem}
+   mi-clear
+   ^{:doc "Undo last action." :tag JMenuItem}
    mi-undo
-   ^{:doc "Redo menu item." :tag JMenuItem}
+   ^{:doc "Redo action." :tag JMenuItem}
    mi-redo
-   ^{:doc "Exit menu item." :tag JMenuItem}
+   ^{:doc "Exit app." :tag JMenuItem}
    mi-exit
-   ^{:doc "View control polygon toggle button." :tag JCheckBoxMenuItem}
+   ^{:doc "Show/hide control polygon." :tag JCheckBoxMenuItem}
    mi-view-control
    ^{:doc "Spinner for angle of rotation, in radians." :tag JSpinner}
    spinner-rot
@@ -35,7 +37,7 @@
 
 (defn ^GUI make-blank-GUI
   []
-  (GUI. nil nil nil nil nil nil nil nil nil nil nil))
+  (GUI. nil nil nil nil nil nil nil nil nil nil nil nil))
 
 (defrecord ^{:doc "Viewport state."}
     Viewpoint
