@@ -22,24 +22,26 @@
   (is (= ((isomap inc int char) \3) \4))
   (is (= ((isomap (partial * 2) int char) \space) \@)))
 
-(deftest build
+(deftest impl
   (is (= (pt 2 3) (Point2D$Double. 2 3)))
-  (let [v (Vec2. 4 5)]
-    (is (= (.x v) 4)
-        (= (.y v) 5))))
+  (is (= (vec2 2 3) (Vec2. 2 3))))
+
+(deftest inverse-build
+  (is (= (de-pt (pt 2 3)) [2 3]))
+  (is (= (de-vec (vec2 2 3)) [2 3])))
 
 (deftest sum
-  (is (= (pt+ (pt 2 3) (Vec2. 4 -5)) (pt 6 -2)))
-  (is (= (vec+ (Vec2. 2 3) (Vec2. 4 -5)) (Vec2. 6 -2))))
+  (is (= (pt+ (pt 2 3) (vec2 4 -5)) (pt 6 -2)))
+  (is (= (vec+ (vec2 2 3) (vec2 4 -5)) (vec2 6 -2))))
 
 (deftest neg
-  (is (= (vec-neg (Vec2. 3 4)) (Vec2. -3 -4))))
+  (is (= (vec-neg (vec2 3 4)) (vec2 -3 -4))))
 
 (deftest diff
-  (is (= (pt-diff (pt 100 130) (pt 102 135)) (Vec2. 2 5))))
+  (is (= (pt-diff (pt 100 130) (pt 102 135)) (vec2 2 5))))
 
 (deftest destructuring
   (is (= (de-pt (pt -2 15)) [-2 15]))
-  (is (= (de-vec (Vec2. 3 4)) [3 4]))
+  (is (= (de-vec (vec2 3 4)) [3 4]))
   (is (= (de-dim (Dimension. 3 12)) [3 12])))
 

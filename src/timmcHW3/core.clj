@@ -222,12 +222,12 @@
 (defmulti xform
   "Transform using given coordinates."
   (fn [_ x] (class x)))
-(defmethod xform Point2D
+(defmethod ^Point2D xform Point2D
   [^AffineTransform at, ^Point2D p]
   (.transform at p nil))
-(defmethod xform Vec2
+(defmethod ^Vec2 xform Vec2
   [^AffineTransform at, ^Vec2 v]
-  (.deltaTransform at (apply pt (de-vec v))))
+  (fvec2<pt #(.deltaTransform at % nil)))
 
 (defn poly-len
   "Calculate the line length of a polyline (2+ vertices) of Point2Ds."
@@ -424,15 +424,16 @@
 (defn canvas-mouse-pressed
   "Might be the start of a drag."
   [^MouseEvent e]
-  (register-mouse-loc! (loc e)) ; TODO cancel any in-progress dragging?
+  (register-mouse-loc! (loc e))
   (clean! :hover)
   (dosync
    (when (show-control-poly?)
      (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))))
 
-(defn f<view> ; make this a multimethod of to-view?
-  [f & args]
-  (isomap #(apply f % args)
+(defn fworld<view ; make this a multimethod of to-view?
+  "Transform a view-space function into a world-space function."
+  [fv & args]
+  (isomap #(apply fv % args)
           (partial xform (to-view))
           (partial xform (from-view))))
 
@@ -444,7 +445,7 @@
      (register-mouse-loc! (loc e))
      (if-let [old-drag (.drag-vertex @*state*)]
        (when can-modify
-         (let [new-drag ((f<view> pt+ vdelta) old-drag)]
+         (let [new-drag ((fworld<view pt+ vdelta) old-drag)]
            (rassoc *state* [:drag-vertex] new-drag)
            (replace-vertex! old-drag new-drag)))
        (do
@@ -455,7 +456,7 @@
              (do (rassoc *state* [:drag-vertex] hover)
                  (dirty! :mode))
              (do (rassoc *view* [:rot-center]
-                         ((f<view> pt+ (vec-neg vdelta)) (.rot-center @*view*)))
+                         ((fworld<view pt+ (vec-neg vdelta)) (.rot-center @*view*)))
                  (dirty! :pose)))))))))
 
 (defn canvas-mouse-released

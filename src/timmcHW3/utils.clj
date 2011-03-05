@@ -115,27 +115,32 @@
    ^{:tag double} y
    ])
 
+(defn ^Vec2 vec2
+  "Create a 2-D Vector."
+  [x y]
+  (Vec2. x y))
+
 (defn de-vec
   "Read a Vec2 into a 2-vector of x, y."
-  [v]
+  [^Vec2 v]
   [(.x v) (.y v)])
 
 (defn ^Vec2 vec+
   "Sum two Vectors."
   [^Vec2 v1, ^Vec2 v2]
-  (Vec2. (+ (.x v1) (.x v2))
-         (+ (.y v1) (.y v2))))
+  (vec2 (+ (.x v1) (.x v2))
+       (+ (.y v1) (.y v2))))
 
 (defn ^Vec2 vec-neg
   "Reverse a Vector."
   [^Vec2 v]
-  (Vec2. (- (.x v)) (- (.y v))))
+  (vec2 (- (.x v)) (- (.y v))))
 
 (defn ^Vec2 pt-diff
   "Computes vector (- end start)"
   [^Point2D start, ^Point2D end]
-  (Vec2. (- (.getX end) (.getX start))
-         (- (.getY end) (.getY start))))
+  (vec2 (- (.getX end) (.getX start))
+       (- (.getY end) (.getY start))))
 
 (defn pt+
   "Add a vector to a point."
@@ -143,3 +148,9 @@
   (pt (+ (.getX p) (.x offset))
       (+ (.getY p) (.y offset))))
 
+(defn fvec2<pt
+  "Transform f:pt->pt (and optional args) into g:vec2->vec2."
+  [f & args]
+  (isomap #(apply f % args)
+          #(apply pt (de-vec %))
+          #(apply vec2 (de-pt %))))
