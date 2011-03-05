@@ -113,7 +113,12 @@
   [
    ^{:tag double} x
    ^{:tag double} y
-  ])
+   ])
+
+(defn de-vec
+  "Read a Vec2 into a 2-vector of x, y."
+  [v]
+  [(.x v) (.y v)])
 
 (defn ^Vec2 vec+
   "Sum two Vectors."

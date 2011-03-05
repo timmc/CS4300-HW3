@@ -116,8 +116,7 @@
   (dosync
    (let [dim (.getSize (.canvas @*gui*))
          [dim-w dim-h] (de-dim dim)]
-     (rassoc *view* [:view-center]
-                    (pt (/ dim-w 2) (/ dim-h 2)))
+     (rassoc *view* [:view-center] (pt (/ dim-w 2) (/ dim-h 2)))
      (rassoc *view* [:viewport-dim] dim))))
 
 (defn update-pose!
@@ -203,6 +202,9 @@
 
 ;;;-- Math --;;;
 
+(defn ^AffineTransform to-view [] (.xform-to-view ^Viewpoint @*view*))
+(defn ^AffineTransform from-view [] (.xform-from-view ^Viewpoint @*view*))
+
 ;;;TODO: add {set,nudge}-{rotation,zoom,translation-{x,y}}! functions
 ;;;TODO: add functions to apply transforms to collections of coords
 
@@ -215,25 +217,17 @@
               (.getX p1) (.getY p1)
               (.getX p2) (.getY p2)
               (.getX p3) (.getY p3))
-    (.createTransformedShape
-     ^AffineTransform (.xform-to-view ^Viewpoint @*view*) path)))
+    (.createTransformedShape (to-view) path)))
 
-(defn ^Point2D transform
-  "Transform a location from one coordinate system to another."
-  ([^AffineTransform at, sx, sy]
-     (.transform at (pt sx sy) nil))
-  ([^AffineTransform at, ^Point2D p]
-     (.transform at p nil)))
-
-(defn ^Point2D loc-to-view
-  "Transform a location from world to viewport coords."
-  [& args]
-  (apply transform (.xform-to-view ^Viewpoint @*view*) args))
-
-(defn ^Point2D loc-from-view
-  "Transform a location from viewport to world coords."
-  [& args]
-  (apply transform (.xform-from-view ^Viewpoint @*view*) args))
+(defmulti xform
+  "Transform using given coordinates."
+  (fn [_ x] (class x)))
+(defmethod xform Point2D
+  [^AffineTransform at, ^Point2D p]
+  (.transform at p nil))
+(defmethod xform Vec2
+  [^AffineTransform at, ^Vec2 v]
+  (.deltaTransform at (apply pt (de-vec v))))
 
 (defn poly-len
   "Calculate the line length of a polyline (2+ vertices) of Point2Ds."
@@ -283,7 +277,7 @@
            (if-let [mouse-pos (.mouse-pos ^ProgState @*state*)]
              (or (.drag-vertex @*state*)
                  (let [[curX curY] (de-pt mouse-pos)]
-                   (first (filter #(pick-vertex? curX curY (loc-to-view %))
+                   (first (filter #(pick-vertex? curX curY (xform (to-view) %))
                                   (rseq (.curve ^UserData @*udata*))))))
              nil))))
 
@@ -297,11 +291,11 @@
   "Draw a potentially incomplete curve."
   [^Graphics2D g, wpoints]
   (when (show-control-poly?)
-    (let [vpoints (map loc-to-view wpoints)]
+    (let [vpoints (map (partial xform (to-view)) wpoints)]
       (draw-control-segments g vpoints)
       (draw-control-points g vpoints)
       (when-let [hover (.hover-vertex ^ProgState @*state*)]
-        (draw-hover g (loc-to-view hover)))))
+        (draw-hover g (xform (to-view) hover)))))
   (when (at-least-cubic?)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
@@ -309,7 +303,7 @@
           smax 200
           smult 100
           samples (max smin (min smax (int (* (poly-foldness wpoints) smult))))]
-      (.draw g (.createTransformedShape (.xform-to-view ^Viewpoint @*view*)
+      (.draw g (.createTransformedShape (to-view)
                                         (de-casteljau wpoints samples))))))
 
 (defn render
@@ -336,9 +330,9 @@
   []
   (dosync
    (rassoc *state* [:mode]
-                  (if (< (count (.curve ^UserData @*udata*)) 4)
-                    :extend0
-                    :extend1))))
+           (if (< (count (.curve ^UserData @*udata*)) 4)
+             :extend0
+             :extend1))))
 
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
@@ -363,10 +357,10 @@
 (defn calc-best-fit
   "Calculate new {:rot-center, :view-minspect} that may be merged into view."
   []
-  (let [vverts (map loc-to-view (.curve @*udata*))
+  (let [vverts (map (partial xform (to-view)) (.curve @*udata*))
         ^Rectangle2D vbounds (poly-bounds vverts)
-        ^Point2D wcenter (loc-from-view (.getCenterX vbounds)
-                                        (.getCenterY vbounds))
+        ^Point2D wcenter (xform (from-view) (pt (.getCenterX vbounds)
+                                                (.getCenterY vbounds)))
         width-rescale (/ (.width vbounds)
                          (.getWidth (.canvas @*gui*)))
         height-rescale (/ (.height vbounds)
@@ -419,7 +413,7 @@
               (not (.isControlDown e))
               (show-control-poly?)
               (not= (.mode @*state*) :manipulate))
-     (append-vertex! (loc-from-view (.getX e) (.getY e)))
+     (append-vertex! (xform (from-view) (loc e)))
      (save-action! "add vertex")
      (dirty! :hover))))
 
@@ -438,7 +432,9 @@
 
 (defn f<view> ; make this a multimethod of to-view?
   [f & args]
-  (isomap #(apply f % args) loc-to-view loc-from-view))
+  (isomap #(apply f % args)
+          (partial xform (to-view))
+          (partial xform (from-view))))
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
@@ -475,9 +471,6 @@
 (defn canvas-mouse-exited
   []
   (dosync
-   (when-not (.drag-vertex @*state*)
-     (rassoc *state* [:mouse-pos] nil)
-     (dirty! :mouse-pos))
    (rassoc *state* [:hover-vertex] nil)
    (dirty! :hover)))
 

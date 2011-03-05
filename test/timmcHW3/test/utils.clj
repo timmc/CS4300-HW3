@@ -40,5 +40,6 @@
 
 (deftest destructuring
   (is (= (de-pt (pt -2 15)) [-2 15]))
+  (is (= (de-vec (Vec2. 3 4)) [3 4]))
   (is (= (de-dim (Dimension. 3 12)) [3 12])))
 
