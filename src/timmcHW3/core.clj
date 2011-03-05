@@ -497,49 +497,35 @@
 
 ;;;-- Components --;;;
 
+(defn add-action-handler
+  "Add an action listener to the GUI component.
+   The thunk is called with no arguments."
+  [^Component c, f]
+  (doto c
+    (.addActionListener
+     (proxy [ActionListener] []
+       (actionPerformed [_] (f))))))
+
 (defn enliven!
   "Add action listeners to GUI components."
   [rgui]
-  (doto (.mi-clear @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (do-clear)
-         (clean!)))))
-  (doto (.mi-undo @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (do-history! hist/undo? hist/undo)
-         (clean!)))))
-  (doto (.mi-redo @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (do-history! hist/redo? hist/redo)
-         (clean!)))))
-  (doto (.mi-view-control @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (cancel-action!)
-         (clean! :painting)))))
-  (doto (.mi-exit @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (do-maybe-exit)))))
+  (let [handlers
+        {:mi-clear        #(do-clear)
+         :mi-undo         #(do-history! hist/undo? hist/undo)
+         :mi-redo         #(do-history! hist/redo? hist/redo)
+         :mi-view-control #(do (cancel-action!)
+                               (dirty! :painting))
+         :mi-exit         #(do-maybe-exit)
+         :button-fit      #(do-best-fit)
+        }]
+    (doseq [[k f] handlers]
+      (add-action-handler (k @rgui)
+                          #(do (f) (clean!)))))
   (doto (.spinner-rot @rgui)
     (.addChangeListener
      (proxy [ChangeListener] []
        (stateChanged [_]
          (clean! :pose-spinners)))))
-  (doto (.button-fit @rgui)
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_]
-         (do-best-fit)
-         (clean!)))))
   (doto (.spinner-zoom @rgui)
     (.addChangeListener
      (proxy [ChangeListener] []
@@ -571,7 +557,7 @@
                :center update-canvas-shape! [:canvas-shape]
                :pose-spinners nil false ; data in JSpinners
                :pose update-pose! [:pose-spinners]
-               :mouse-pos nil false ; mouseX and mouseY in @*state*
+               :mouse-pos nil false ; mouse-pos in @*state*
                :udata nil false ; pretty much anything in @*udata*
                :hover update-hover! [:mouse-pos :udata]
                :xform update-xform! [:pose :center]
