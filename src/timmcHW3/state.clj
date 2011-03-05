@@ -44,16 +44,3 @@
 (defn ^ProgState make-blank-ProgState
   []
   (ProgState. :extend0 nil nil nil))
-
-(defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
-    UserData
-  [^{:doc "The act that produced this state, e.g. \"vertex drag\" or empty string."}
-   act
-   ^{:doc "Vector of Bézier curve control vertices Possibly empty."}
-   curve
-   ])
-
-(defn ^UserData make-blank-UserData
-  []
-  (UserData. "Initialization" []))
-

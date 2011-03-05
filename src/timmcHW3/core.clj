@@ -5,8 +5,10 @@
   (:use [timmcHW3.drawing])
   (:use [timmcHW3.gui])
   (:import [timmcHW3.gui GUI])
+  (:require [timmcHW3.user-data :as udata])
+  (:import [timmcHW3.user-data UserData])
   (:use timmcHW3.state)
-  (:import [timmcHW3.state Viewpoint ProgState UserData])
+  (:import [timmcHW3.state Viewpoint ProgState])
   (:require [timmcHW3.cascade :as dirt])
   (:require [timmcHW3.history :as hist])
   (:import
@@ -22,11 +24,11 @@
     MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
   (:gen-class))
 
-(def ^{:doc "The viewpoint's state."} *gui* (ref nil))
+(def ^{:doc "Collection of GUI components."} *gui* (ref nil))
 (def ^{:doc "The viewpoint's state."} *view* (ref nil))
-(def ^{:doc "Global pointer to current state."} *state* (ref nil))
+(def ^{:doc "Tool and activity state."} *state* (ref nil))
 (def ^{:doc "User data that needs undo/redo."} *udata* (ref nil))
-
+(def ^{:doc "Undo/redo buffers."} *history* (ref nil))
 (def ^{:doc "State dirtiness cascade."} *cascade* (ref nil))
 
 (defn dirty!
@@ -46,31 +48,13 @@
       (alter *cascade* dirt/clean :all)
       nil)))
 
-(def ^{:doc "Undo/redo buffers."} *history* (ref nil))
-
 ;;;-- Mode accessors --;;;
-
-;;; TODO: Move these to state.clj?
-(defn user-has-data?
-  "Return true if user data is not empty."
-  []
-  (pos? (count (.curve ^UserData @*udata*))))
-
-(defn curve-has-extent?
-  "Return true if we can define the size of the control polygon."
-  []
-  (>= (count (.curve ^UserData @*udata*)) 2))
-
-(defn at-least-cubic?
-  "Return true if we are showing enough points to draw a non-trivial curve."
-  []
-  (>= (count (.curve ^UserData @*udata*)) 3))
 
 (defn show-control-poly?
   "Check whether we are showing the control polygon."
   []
   (or (.getState (.mi-view-control @*gui*))
-      (not (at-least-cubic?))))
+      (not (udata/curve-cubic+? @*udata*))))
 
 ;;;-- Viewpoint --;;;
 
@@ -302,7 +286,7 @@
       (draw-control-points g vpoints)
       (when-let [hover (.hover-vertex ^ProgState @*state*)]
         (draw-hover g (xform (to-view) hover)))))
-  (when (at-least-cubic?)
+  (when (udata/curve-cubic+? @*udata*)
     (.setColor g curve-color)
     (.setStroke g curve-stroke)
     (let [smin 20
@@ -336,16 +320,19 @@
   []
   (dosync
    (rassoc *state* [:mode]
-           (if (< (count (.curve ^UserData @*udata*)) 4)
-             :extend0
-             :extend1))))
+           (if (udata/curve-cubic+? @*udata*)
+             :extend1
+             :extend0))))
 
 (defn reflect-mode!
   "Update mode-dependent GUI elements."
   []
-  (.setEnabled (.mi-clear ^GUI @*gui*) (user-has-data?))
-  (.setEnabled (.button-fit ^GUI @*gui*) (curve-has-extent?))
-  (.setEnabled (.mi-view-control ^GUI @*gui*) (at-least-cubic?)))
+  (.setEnabled (.mi-clear ^GUI @*gui*)
+               (udata/has-data? @*udata*))
+  (.setEnabled (.button-fit ^GUI @*gui*)
+               (udata/curve-extent? @*udata*))
+  (.setEnabled (.mi-view-control ^GUI @*gui*)
+               (udata/curve-cubic+? @*udata*)))
 
 ;;;-- Event handlers --;;;
 
@@ -389,7 +376,7 @@
   []
   (->>
    (dosync
-    (when (curve-has-extent?)
+    (when (udata/curve-extent? @*udata*)
       (let [best (calc-best-fit)]
         (rassoc *view* [:rot-center] (:rot-center best))
         (dirty! :pose :pose-spinners)
@@ -576,7 +563,7 @@
                      {:rot-center default-rot-center
                       :view-minspect default-view-minspect
                       :view-rot default-view-rot}))
-     (ref-set *udata* (make-blank-UserData))
+     (ref-set *udata* (udata/create))
      (ref-set *cascade* (make-cascade))
      (ref-set *history* (hist/create @*udata*)))
     (clean!)
