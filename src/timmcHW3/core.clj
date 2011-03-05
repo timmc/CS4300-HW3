@@ -33,7 +33,7 @@
   "Mark one or more pieces of state as dirty."
   [& kws]
   (dosync
-   (ref-set *cascade* (reduce dirt/dirty @*cascade* kws))
+   (alter *cascade* (partial reduce dirt/dirty) kws)
    nil))
 
 (defn clean!
@@ -43,7 +43,7 @@
      (clean!))
   ([]
      (dosync
-      (ref-set *cascade* (dirt/clean @*cascade* :all))
+      (alter *cascade* dirt/clean :all)
       nil)))
 
 (def ^{:doc "Undo/redo buffers."} *history* (ref nil))
@@ -195,7 +195,7 @@
   [^String actname]
   (dosync
    (rassoc *udata* [:act] actname)
-   (ref-set *history* (hist/act @*history* @*udata*))
+   (alter *history* hist/act @*udata*)
    (dirty! :history-gui)))
 
 (defn cancel-action!
