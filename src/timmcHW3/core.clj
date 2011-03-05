@@ -572,8 +572,8 @@
                :pose-spinners nil false ; data in JSpinners
                :pose update-pose! [:pose-spinners]
                :mouse-pos nil false ; mouseX and mouseY in @*state*
-               :hover update-hover! [:mouse-pos]
                :udata nil false ; pretty much anything in @*udata*
+               :hover update-hover! [:mouse-pos :udata]
                :xform update-xform! [:pose :center]
                :mode update-mode! [:udata]
                :toolstate reflect-mode! [:mode]
