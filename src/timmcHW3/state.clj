@@ -66,19 +66,17 @@
             :extend1 - Wait for indication that new curve is done. Allow vertex input or manipulation.
             :manipulate - Allow dragging of vertices."}
    mode
-   ^{:doc "Last mouse X position in view"}
-   mouseX
-   ^{:doc "Last mouse Y position in view"}
-   mouseY
-   ^{:doc "World-vertex (identical) that cursor is hovering over, or nil."}
+   ^{:doc "Last mouse position in view, or nil." :tag Point2D}
+   mouse-pos
+   ^{:doc "World-vertex (identical) that cursor is hovering over, or nil." :tag Point2D}
    hover-vertex
-   ^{:doc "World-vertex (identical) that is being dragged, or nil."}
+   ^{:doc "World-vertex (identical) that is being dragged, or nil." :tag Point2D}
    drag-vertex
    ])
 
 (defn ^ProgState make-blank-ProgState
   []
-  (ProgState. :extend0 -1 -1 nil nil))
+  (ProgState. :extend0 nil nil nil))
 
 (defrecord ^{:doc "Current state of user's data. This is saved in undo/redo buffers."}
     UserData

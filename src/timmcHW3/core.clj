@@ -4,6 +4,7 @@
    [timmcHW3.utils]
    [timmcHW3.drawing]
    [timmcHW3.gui])
+  (:import [timmcHW3.utils Vec2])
   (:use timmcHW3.state)
   (:import [timmcHW3.state GUI Viewpoint ProgState UserData])
   (:require [timmcHW3.cascade :as dirt])
@@ -67,7 +68,7 @@
 
 ;;;-- Viewpoint --;;;
 
-(def default-rot-center (Point2D$Double. 0 0))
+(def default-rot-center (pt 0 0))
 (def default-view-minspect 100)
 (def default-view-rot 0.0)
 
@@ -116,7 +117,7 @@
    (let [dim (.getSize (.canvas @*gui*))
          [dim-w dim-h] (de-dim dim)]
      (rassoc *view* [:view-center]
-                    (Point2D$Double. (/ dim-w 2) (/ dim-h 2)))
+                    (pt (/ dim-w 2) (/ dim-h 2)))
      (rassoc *view* [:viewport-dim] dim))))
 
 (defn update-pose!
@@ -220,7 +221,7 @@
 (defn ^Point2D transform
   "Transform a location from one coordinate system to another."
   ([^AffineTransform at, sx, sy]
-     (.transform at (Point2D$Double. sx sy) nil))
+     (.transform at (pt sx sy) nil))
   ([^AffineTransform at, ^Point2D p]
      (.transform at p nil)))
 
@@ -279,11 +280,12 @@
   []
   (dosync
    (rassoc *state* [:hover-vertex]
-           (or (.drag-vertex @*state*)
-               (let [curX (.mouseX ^ProgState @*state*)
-                     curY (.mouseY ^ProgState @*state*)]
-                 (first (filter #(pick-vertex? curX curY (loc-to-view %))
-                                (rseq (.curve ^UserData @*udata*)))))))))
+           (if-let [mouse-pos (.mouse-pos ^ProgState @*state*)]
+             (or (.drag-vertex @*state*)
+                 (let [[curX curY] (de-pt mouse-pos)]
+                   (first (filter #(pick-vertex? curX curY (loc-to-view %))
+                                  (rseq (.curve ^UserData @*udata*))))))
+             nil))))
 
 ;;;-- Rendering --;;;
 
@@ -394,11 +396,10 @@
   "Make note of new mouse location, dirty if changed."
   ([x y]
      (dosync
-      (when (or (rassoc *state* [:mouseX] x)
-                (rassoc *state* [:mouseY] y))
+      (when (rassoc *state* [:mouse-pos] (pt x y))
         (dirty! :mouse-pos))))
-  ([^MouseEvent e]
-     (register-mouse-loc! (.getX e) (.getY e))))
+  ([^Point2D p]
+     (apply register-mouse-loc! (de-pt p))))
 
 ;;;-- Event dispatch --;;;
 
@@ -406,12 +407,12 @@
 
 (defmulti ^Point2D loc "Get view location." class)
 (defmethod loc Point2D [p] p)
-(defmethod loc MouseEvent [e] (Point2D$Double. (.getX e) (.getY e)))
+(defmethod loc MouseEvent [e] (pt (.getX e) (.getY e)))
 
 (defn canvas-mouse-clicked
   "A click event has occurred on the canvas."
   [^MouseEvent e]
-  (register-mouse-loc! e)
+  (register-mouse-loc! (loc e))
   (dosync
    (when (and (= (.getButton e) MouseEvent/BUTTON1)
               (not (.isShiftDown e))
@@ -424,40 +425,47 @@
 
 (defn canvas-mouse-moved
   [^MouseEvent e]
-  (register-mouse-loc! e))
+  (register-mouse-loc! (loc e)))
 
 (defn canvas-mouse-pressed
   "Might be the start of a drag."
   [^MouseEvent e]
-  (register-mouse-loc! e) ; TODO cancel any in-progress dragging?
+  (register-mouse-loc! (loc e)) ; TODO cancel any in-progress dragging?
   (clean! :hover)
   (dosync
    (when (show-control-poly?)
      (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))))
 
+(defn f<view> ; make this a multimethod of to-view?
+  [f & args]
+  (isomap #(apply f % args) loc-to-view loc-from-view))
+
 (defn canvas-mouse-dragged
   [^MouseEvent e]
-  ;;TODO: calculate movement distance here
-  (register-mouse-loc! e)
   (dosync
-   (when (show-control-poly?)
+   (let [vdelta (pt-diff (.mouse-pos @*state*) (loc e))
+         can-modify (show-control-poly?)]
+     (register-mouse-loc! (loc e))
      (if-let [old-drag (.drag-vertex @*state*)]
-       (do
-         ;;TODO: This makes the vertex jump to be centered on the pointer.
-         (let [new-drag (loc-from-view (loc e))]
+       (when can-modify
+         (let [new-drag ((f<view> pt+ vdelta) old-drag)]
            (rassoc *state* [:drag-vertex] new-drag)
            (replace-vertex! old-drag new-drag)))
        (do
-         (clean! :hover)
-         (if-let [hover (.hover-vertex @*state*)]
-           (do (rassoc *state* [:drag-vertex] hover)
-               (dirty! :mode))
-           (comment "TODO: drag canvas")))))))
+         (when can-modify ; don't bother otherwise
+           (clean! :hover))
+         (let [hover (.hover-vertex @*state*)]
+           (if (and can-modify hover)
+             (do (rassoc *state* [:drag-vertex] hover)
+                 (dirty! :mode))
+             (do (rassoc *view* [:rot-center]
+                         ((f<view> pt+ (vec-neg vdelta)) (.rot-center @*view*)))
+                 (dirty! :pose)))))))))
 
 (defn canvas-mouse-released
   "In some cases the end of a drag."
   [^MouseEvent e]
-  (register-mouse-loc! e)
+  (register-mouse-loc! (loc e))
   (dosync
    (when-not (nil? (.drag-vertex @*state*))
      (save-action! "drag vertex")
@@ -467,14 +475,15 @@
 (defn canvas-mouse-exited
   []
   (dosync
-   (rassoc *state* [:mouseX] -1)
-   (rassoc *state* [:mouseY] -1)
+   (when-not (.drag-vertex @*state*)
+     (rassoc *state* [:mouse-pos] nil)
+     (dirty! :mouse-pos))
    (rassoc *state* [:hover-vertex] nil)
    (dirty! :hover)))
 
 (defn canvas-wheel-moved
   [^MouseWheelEvent e]
-  (register-mouse-loc! e)
+  (register-mouse-loc! (loc e))
   );TODO: scroll wheel zooms by adjusting zoom spinner
 
 ;;;-- Components --;;;
