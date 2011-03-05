@@ -85,7 +85,7 @@
 
 ;;;-- Function munging --;;;
 
-(defn isomap
+(defn isomorph
   "Return a function that operates within a different space.
    Given f:x->x, mapper:x->y, and inverter:y->x, produces g:y->y."
   [f mapper inverter]
@@ -129,7 +129,7 @@
   "Sum two Vectors."
   [^Vec2 v1, ^Vec2 v2]
   (vec2 (+ (.x v1) (.x v2))
-       (+ (.y v1) (.y v2))))
+        (+ (.y v1) (.y v2))))
 
 (defn ^Vec2 vec-neg
   "Reverse a Vector."
@@ -140,7 +140,7 @@
   "Computes vector (- end start)"
   [^Point2D start, ^Point2D end]
   (vec2 (- (.getX end) (.getX start))
-       (- (.getY end) (.getY start))))
+        (- (.getY end) (.getY start))))
 
 (defn pt+
   "Add a vector to a point."
@@ -151,6 +151,6 @@
 (defn fvec2<pt
   "Transform f:pt->pt (and optional args) into g:vec2->vec2."
   [f & args]
-  (isomap #(apply f % args)
-          #(apply pt (de-vec %))
-          #(apply vec2 (de-pt %))))
+  (isomorph #(apply f % args)
+            #(apply pt (de-vec %))
+            #(apply vec2 (de-pt %))))

@@ -433,9 +433,9 @@
 (defn fworld<view ; make this a multimethod of to-view?
   "Transform a view-space function into a world-space function."
   [fv & args]
-  (isomap #(apply fv % args)
-          (partial xform (to-view))
-          (partial xform (from-view))))
+  (isomorph #(apply fv % args)
+            (partial xform (to-view))
+            (partial xform (from-view))))
 
 (defn canvas-mouse-dragged
   [^MouseEvent e]
