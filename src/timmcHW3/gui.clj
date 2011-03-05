@@ -124,7 +124,8 @@
 (defn- ^JSpinner new-pose-zoom
   "Make the spinner for viewpoint zooming."
   [rgui]
-  (let [nm (SpinnerNumberModel. 1.0 0.001 20.0 0.003) ; log scale, higher is greater mag
+  ;;;TODO: Restrict changes to be within number model
+  (let [nm (SpinnerNumberModel. 1.0 0.001 3.0 0.05) ; log scale, higher is greater mag
 	js (JSpinner. nm)
 	ned (JSpinner$NumberEditor. js "#####0.000")]
     (-> ned (.getTextField) (.setColumns 5))
