@@ -381,7 +381,7 @@
         (rassoc *view* [:rot-center] (:rot-center best))
         (dirty! :pose :pose-spinners)
         (minspect-to-zoom (:view-minspect best)))))
-   (.setValue (.spinner-zoom @*gui*))))
+   (set-number-spinner (.spinner-zoom @*gui*))))
 
 (defn do-maybe-exit
   "Exit, or possible ask user to save data first."
@@ -439,6 +439,7 @@
             (partial xform (to-view))
             (partial xform (from-view))))
 
+;;; FIXME: Drag of viewpoint ending over vertex can suddenly start dragging vertex.
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (dosync

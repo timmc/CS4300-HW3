@@ -124,7 +124,6 @@
 (defn- ^JSpinner new-pose-zoom
   "Make the spinner for viewpoint zooming."
   [rgui]
-  ;;;TODO: Restrict changes to be within number model
   (let [nm (SpinnerNumberModel. 1.0 0.001 3.0 0.05) ; log scale, higher is greater mag
 	js (JSpinner. nm)
 	ned (JSpinner$NumberEditor. js "#####0.000")]
@@ -189,5 +188,14 @@
     (.addActionListener
      (proxy [ActionListener] []
        (actionPerformed [_] (f))))))
+
+(defn set-number-spinner
+  "Set the value of the spinner, but restrict to valid values."
+  [^JSpinner js, x]
+  (let [^SpinnerNumberModel nm (.getModel js)
+        bounded (double (Math/min (double (.getMaximum nm))
+                                  (Math/max (double (.getMinimum nm))
+                                            x)))]
+    (io! (.setValue js bounded))))
 
 ;;;TODO add statusbar
