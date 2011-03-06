@@ -39,8 +39,10 @@
    hover-vertex
    ^{:doc "World-vertex (identical) that is being dragged, or nil." :tag Point2D}
    drag-vertex
+   ^{:doc "Whether the viewpoint is currently being dragged." :tag boolean}
+   drag-viewpoint?
    ])
 
 (defn ^ProgState make-blank-ProgState
   []
-  (ProgState. :extend0 nil nil nil))
+  (ProgState. :extend0 nil nil nil false))

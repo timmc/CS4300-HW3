@@ -259,16 +259,22 @@
      (and (<= (Math/abs ^Double (- (.getX vvertex) vx)) pick-radius)
           (<= (Math/abs ^Double (- (.getY vvertex) vy)) pick-radius))))
 
+(defn ^Point2D calc-hover
+  "Return the hovered vertex or nil."
+  [^Point2D vpos, vertices]
+  (let [[vx vy] (de-pt vpos)]
+    (first (filter #(pick-vertex? vx vy (xform (to-view) %))
+                   (rseq vertices)))))
+
 (defn update-hover!
   "Check which vertex is hovered, starting with latest."
   []
   (dosync
    (rassoc *state* [:hover-vertex]
            (if-let [mouse-pos (.mouse-pos ^ProgState @*state*)]
-             (or (.drag-vertex @*state*)
-                 (let [[curX curY] (de-pt mouse-pos)]
-                   (first (filter #(pick-vertex? curX curY (xform (to-view) %))
-                                  (rseq (.curve ^UserData @*udata*))))))
+             (and (not (.drag-viewpoint? @*state*))
+                  (or (.drag-vertex @*state*)
+                      (calc-hover mouse-pos (.curve ^UserData @*udata*))))
              nil))))
 
 ;;;-- Rendering --;;;
@@ -429,8 +435,11 @@
   (register-mouse-loc! (loc e))
   (clean! :hover)
   (dosync
-   (when (show-control-poly?)
-     (rassoc *state* [:drag-vertex] (.hover-vertex @*state*)))))
+   (let [can-modify (show-control-poly?)
+         hovered (.hover-vertex @*state*)]
+     (if (and can-modify hovered)
+       (rassoc *state* [:drag-vertex] hovered)
+       (rassoc *state* [:drag-viewpoint?] true)))))
 
 (defn fworld<view ; make this a multimethod of to-view?
   "Transform a view-space function into a world-space function."
@@ -439,10 +448,10 @@
             (partial xform (to-view))
             (partial xform (from-view))))
 
-;;; FIXME: Drag of viewpoint ending over vertex can suddenly start dragging vertex.
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (dosync
+   ;; FIXME: The delta approach can slowly lead to noticeable drifting of cursor on extreme zoom
    (let [vdelta (pt-diff (.mouse-pos @*state*) (loc e))
          can-modify (show-control-poly?)]
      (register-mouse-loc! (loc e))
@@ -454,12 +463,14 @@
        (do
          (when can-modify ; don't bother otherwise
            (clean! :hover))
-         (let [hover (.hover-vertex @*state*)]
-           (if (and can-modify hover)
+         (let [hover (.hover-vertex @*state*)
+               drag-view? (.drag-viewpoint? @*state*)]
+           (if (and (not drag-view?) can-modify hover)
              (do (rassoc *state* [:drag-vertex] hover)
                  (dirty! :mode))
              (do (rassoc *view* [:rot-center]
                          ((fworld<view pt+ (vec-neg vdelta)) (.rot-center @*view*)))
+                 (rassoc *state* [:drag-viewpoint?] true) ; remain or become true
                  (dirty! :pose)))))))))
 
 (defn canvas-mouse-released
@@ -470,7 +481,8 @@
    (when-not (nil? (.drag-vertex @*state*))
      (save-action! "drag vertex")
      (rassoc *state* [:drag-vertex] nil)
-     (dirty! :painting)))) ;TODO draw ghost of original during drag
+     (dirty! :painting)) ;TODO draw ghost of original during drag
+   (rassoc *state* [:drag-viewpoint?] false)))
 
 (defn canvas-mouse-exited
   []
