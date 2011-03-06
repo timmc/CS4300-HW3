@@ -67,6 +67,24 @@
     (.add (JLabel. text) BorderLayout/LINE_START)
     (.add child BorderLayout/LINE_END)))
 
+(defn add-action-handler
+  "Add an action listener to the GUI component.
+   The thunk is called with no arguments."
+  [^Component c, f]
+  (doto c
+    (.addActionListener
+     (proxy [ActionListener] []
+       (actionPerformed [_] (f))))))
+
+(defn set-number-spinner
+  "Set the value of the spinner, but restrict to valid values."
+  [^JSpinner js, x]
+  (let [^SpinnerNumberModel nm (.getModel js)
+        bounded (double (Math/min (double (.getMaximum nm))
+                                  (Math/max (double (.getMinimum nm))
+                                            x)))]
+    (io! (.setValue js bounded))))
+
 ;;;-- Component creators --;;;
 
 ;;; We define these in functions so they are not created at compile-time.
@@ -179,23 +197,5 @@
       (.add (create! rgui [:controls] new-controls rgui) BorderLayout/LINE_START)
       (.add (create! rgui [:canvas] new-canvas rgui renderer) BorderLayout/CENTER)
       (.pack))))
-
-(defn add-action-handler
-  "Add an action listener to the GUI component.
-   The thunk is called with no arguments."
-  [^Component c, f]
-  (doto c
-    (.addActionListener
-     (proxy [ActionListener] []
-       (actionPerformed [_] (f))))))
-
-(defn set-number-spinner
-  "Set the value of the spinner, but restrict to valid values."
-  [^JSpinner js, x]
-  (let [^SpinnerNumberModel nm (.getModel js)
-        bounded (double (Math/min (double (.getMaximum nm))
-                                  (Math/max (double (.getMinimum nm))
-                                            x)))]
-    (io! (.setValue js bounded))))
 
 ;;;TODO add statusbar
