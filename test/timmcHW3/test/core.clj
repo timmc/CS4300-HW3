@@ -1,7 +1,7 @@
 (ns timmcHW3.test.core
    (:use [timmcHW3.core] :reload)
    (:use [timmcHW3.state] :reload)
-   (:import [timmcHW3.state UserData])
+   (:import [timmcHW3.user-data UserData])
    (:use [clojure.test])
    (:import [java.awt.geom Point2D Point2D$Double]))
 

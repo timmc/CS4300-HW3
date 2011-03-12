@@ -6,6 +6,7 @@
    [java.awt.geom AffineTransform Path2D Path2D$Double Point2D Point2D$Double
     Line2D Line2D$Double Rectangle2D$Double Ellipse2D Ellipse2D$Double]))
 
+;; TODO: Use binary subdivision to pick nseg better.
 (defn ^Path2D de-casteljau
   "Use De Casteljau's algorithm to approximate a Bézier curve
    (given as control Point2Ds) by line segments."

@@ -19,8 +19,8 @@
       (is (= (assoc-in0 complex [:qux 1] 7) altered))))
 
 (deftest iso
-  (is (= ((isomap inc int char) \3) \4))
-  (is (= ((isomap (partial * 2) int char) \space) \@)))
+  (is (= ((isomorph inc int char) \3) \4))
+  (is (= ((isomorph (partial * 2) int char) \space) \@)))
 
 (deftest impl
   (is (= (pt 2 3) (Point2D$Double. 2 3)))

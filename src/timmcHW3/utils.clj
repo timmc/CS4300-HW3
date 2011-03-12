@@ -4,7 +4,7 @@
    [java.awt Dimension]
    [java.awt.geom Point2D Point2D$Double]))
 
-;;;-- Fixes --;;;
+;;;; Fixes
 
 (defn update-in0
   "A version of update-in that works with an empty collection of keys."
@@ -28,7 +28,7 @@
     (get-in m ks)
     m))
 
-;;;-- Mutation --;;;
+;;;; Mutation
 
 (defn rassoc
   "Use assoc-in on the contents of a ref, effectively.
@@ -68,7 +68,7 @@
 	       (assoc-in0 (deref ref-val#) keys-val# mk-val#)))
      mk-val#))
 
-;;;-- Data munging --;;;
+;;;; Data munging
 
 (defn interpolate-1
   "Perform a single interpolation on a sequence using binary function. Returns
@@ -83,7 +83,7 @@
   (first (nth (iterate #(interpolate-1 binop %) vals)
 	      (dec (count vals)))))
 
-;;;-- Function munging --;;;
+;;;; Function munging
 
 (defn isomorph
   "Return a function that operates within a different space.
@@ -91,7 +91,7 @@
   [f mapper inverter]
   (fn g [y] (inverter (f (mapper y)))))
 
-;;;-- Geometry --;;;
+;;;; Geometry
 
 (defn de-dim
   "Read a Dimension object into a 2-vector of width, height."
