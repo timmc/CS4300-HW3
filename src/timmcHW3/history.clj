@@ -4,7 +4,7 @@
    Intended use: Use public functions instead of directly using History object."
   (:gen-class))
 
-;;;-- Backend --;;;
+;;;; Backend
 
 (defrecord ^{:doc "Holds current state, undo stack, and redo stack."}
     History
@@ -16,7 +16,10 @@
    future
    ])
 
-;;;-- Constructors --;;;
+;; Stack semantics
+(def push conj)
+
+;;;; Constructors
 
 (defn ^History create
   "Create an empty history buffer with given current state."
@@ -38,7 +41,7 @@
 (defn peek-past
   "Return the most recent past state, or nil if none."
   [^History h]
-  (first (.past h)))
+  (peek (.past h)))
 
 (defn current
   "Return the current state."
@@ -48,32 +51,32 @@
 (defn peek-future
   "Return the next future state, or nil if none."
   [^History h]
-  (first (.future h)))
+  (peek (.future h)))
 
-;;;-- Modifiers --;;;
+;;;; Modifiers
 
 (defn ^History undo
   "Undo if possible, else return input value."
   [^History h]
   (if (undo? h)
-    (History. (rest (.past h))
-	      (first (.past h))
-	      (conj (.future h) (.present h)))
+    (History. (pop (.past h))
+	      (peek (.past h))
+	      (push (.future h) (.present h)))
     h))
 
 (defn ^History redo
   "Redo if possible, else return input value."
   [^History h]
   (if (redo? h)
-    (History. (conj (.past h) (.present h))
-	      (first (.future h))
-	      (rest (.future h)))
+    (History. (push (.past h) (.present h))
+	      (peek (.future h))
+	      (pop (.future h)))
     h))
 
 (defn ^History act
   "Push an action state onto the history, dropping the redo buffer."
   [^History h, state]
-  (History. (conj (.past h) (.present h))
+  (History. (push (.past h) (.present h))
 	    state
 	    ()))
 
