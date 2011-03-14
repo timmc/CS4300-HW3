@@ -8,12 +8,12 @@ Post-submission enhancements.
 
 * Menu item to clear board (undoable)
 * Viewpoint draggable
-* Changed hover appearance of vertices (large and green instead of normal-sized
-  but white)
 
 ### Enhancements
 
 * Prefer to pick most recently placed vertex
+* Changed hover appearance of vertices (large and green instead of normal-sized
+  but white)
 
 ### Bug fixes
 
