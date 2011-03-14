@@ -9,7 +9,7 @@
 </head>
 <body>
 
-<i>This documents version 1.0.0 of the application.</i>
+<i>This documents version 1.1.0 of the application.</i>
 
 <h1>Overview</h1>
 
@@ -27,8 +27,8 @@ your system&mdash;32-bit and 64-bit Java do not work together.</p>
 
 <h1>Running</h1>
 
-<p>Run the <tt>timmc.HW3-standalone.jar</tt> file by double-clicking on it
-or by running <tt>java -jar timmc.HW3-standalone.jar</tt> from
+<p>Run the <tt>timmcHW3-standalone.jar</tt> file by double-clicking on it
+or by running <tt>java -jar timmcHW3-standalone.jar</tt> from
 the parent directory on the command line.</p>
 
 <h1>Usage</h1>
@@ -52,11 +52,14 @@ and the entire image is updated in realtime during the action.</p>
 
 <p>Addition and repositioning of vertices may both be undone and redone in the
 standard fashion. The Spline menu contains Undo and Redo buttons and shows their
-keyboard shortcuts.</p>
+keyboard shortcuts.
+It also contains a Clear command, deleting all vertices at once,
+which is also undoable and redoable.</p>
 
 <p>The viewport may be rotated or zoomed using the spinners in the Position
-panel. If you lose track of the curve by zooming in too far, the Best Fit
-button will reposition the viewport to show the polygon again.</p>
+panel. Additionally, dragging the canvas will move the viewpoint as indicated.
+If you lose track of the curve by zooming in too far or dragging, the Best Fit
+button will reposition the viewpoint to show the polygon again.</p>
 
 <p>Although there is not yet a render/export feature, the View menu does
 contain a toggle with which to hide the control polygon. Screen captures may
