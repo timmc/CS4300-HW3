@@ -22,21 +22,21 @@ todo:
 clean: pkg-clean
 
 PROJNAME := mccormack_t_HW3
-PACKAGE_FILE := $(PROJNAME).tar.gz
-PKGDIR := pkg/$(PROJNAME)
+PACKAGE_FILE := "$(PROJNAME).tar.gz"
+PKGDIR := "pkg/$(PROJNAME)"
 
 pkg: pkg-clean
-	mkdir -p $(PKGDIR)/
-	cp README-CS4300 $(PKGDIR)/README.txt
-	cp -r src/ $(PKGDIR)/src
-	cp -r test/ $(PKGDIR)/test
-	cp -r doc/ $(PKGDIR)/doc
-	cp project.clj deploy/{run,setup}.sh $(PKGDIR)/
+	mkdir -p "$(PKGDIR)/"
+	cp README-CS4300 "$(PKGDIR)/README.txt"
+	cp -r src/ "$(PKGDIR)/src"
+	cp -r test/ "$(PKGDIR)/test"
+	cp -r doc/ "$(PKGDIR)/doc"
+	cp project.clj deploy/{run,setup}.sh NEWS.md "$(PKGDIR)/"
 	find ./pkg -name '*~' -delete
-	tar -czf $(PACKAGE_FILE) --directory pkg/ $(PROJNAME)/
+	tar -czf "$(PACKAGE_FILE)" --directory pkg/ "$(PROJNAME)/"
 
 pkg-clean:
-	rm -f $(PROJNAME).tar.gz
+	rm -f "$(PROJNAME).tar.gz"
 	rm -rf pkg
 	lein clean
 
