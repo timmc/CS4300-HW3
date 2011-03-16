@@ -48,7 +48,7 @@
       (alter *cascade* dirt/clean :all)
       nil)))
 
-;;;-- Mode accessors --;;;
+;;;; Mode accessors
 
 (defn show-control-poly?
   "Check whether we are showing the control polygon."
@@ -56,7 +56,7 @@
   (or (.getState (.mi-view-control @*gui*))
       (not (udata/curve-cubic+? @*udata*))))
 
-;;;-- Viewpoint --;;;
+;;;; Viewpoint
 
 (def default-rot-center (pt 0 0))
 (def default-view-minspect 100)
@@ -118,7 +118,7 @@
      (alter *view* assoc :view-rot rot)
      (alter *view* assoc :view-minspect minspect))))
 
-;;;-- User data modifiers --;;;
+;;;; User data modifiers
 
 (defn append-vertex!
   "Add a vertex to the curve."
@@ -151,7 +151,7 @@
             (comp vec replace-1) (partial identical? old) (constantly new))
    (dirty! :udata)))
 
-;;;-- History --;;;
+;;;; History
 
 (defn update-history-gui!
   "Reflect current undo/redo state into GUI."
@@ -190,24 +190,13 @@
    (ref-set *udata* (hist/current @*history*))
    (dirty! :udata)))
 
-;;;-- Math --;;;
+;;;; Math
 
 (defn ^AffineTransform to-view [] (.xform-to-view ^Viewpoint @*view*))
 (defn ^AffineTransform from-view [] (.xform-from-view ^Viewpoint @*view*))
 
 ;;;TODO: add {set,nudge}-{rotation,zoom,translation-{x,y}}! functions
 ;;;TODO: add functions to apply transforms to collections of coords
-
-(defn ^Path2D view-cubic-curve
-  "Calculate the path based on the current control points."
-  [^Point2D p0, ^Point2D p1, ^Point2D p2, ^Point2D p3]
-  (let [^Path2D path (Path2D$Double.)]
-    (.moveTo path (.getX p0) (.getY p0))
-    (.curveTo path
-              (.getX p1) (.getY p1)
-              (.getX p2) (.getY p2)
-              (.getX p3) (.getY p3))
-    (.createTransformedShape (to-view) path)))
 
 (defmulti xform
   "Transform using given coordinates."
@@ -225,7 +214,8 @@
   (apply + (interpolate-1 #(.distance ^Point2D %1 ^Point2D %2) points)))
 
 (defn poly-bounds
-  "Calculate the bounding Rectangle2D of a polyline (1+ vertices) in its native coordinate frame."
+  "Calculate the bounding Rectangle2D of a polyline (1+ vertices) in its native
+   coordinate frame."
   [points]
   (let [xs (map #(.getX ^Point2D %) points)
         ys (map #(.getY ^Point2D %) points)
@@ -277,7 +267,7 @@
                       (calc-hover mouse-pos (.curve ^UserData @*udata*))))
              nil))))
 
-;;;-- Rendering --;;;
+;;;; Rendering
 
 (def ^Color curve-color Color/RED)
 (def ^BasicStroke curve-stroke
@@ -314,7 +304,7 @@
       (.fill (Rectangle2D$Double. 0 0 w h))))
   (draw-curve g (.curve ^UserData @*udata*)))
 
-;;;-- GUI --;;;
+;;;; GUI
 
 (defn ask-redraw
   "Ask for the canvas to be redrawn."
@@ -340,7 +330,7 @@
   (.setEnabled (.mi-view-control ^GUI @*gui*)
                (udata/curve-cubic+? @*udata*)))
 
-;;;-- Event handlers --;;;
+;;;; Event handlers
 
 (defn do-clear
   "Clear all user data."
@@ -403,7 +393,7 @@
   ([^Point2D p]
      (apply register-mouse-loc! (de-pt p))))
 
-;;;-- Event dispatch --;;;
+;;;; Event dispatch
 
 ;;; clean! will be called by relying code
 
@@ -451,7 +441,8 @@
 (defn canvas-mouse-dragged
   [^MouseEvent e]
   (dosync
-   ;; FIXME: The delta approach can slowly lead to noticeable drifting of cursor on extreme zoom
+   ;; FIXME: The delta approach can slowly lead to noticeable drifting of cursor
+   ;; on extreme zoom
    (let [vdelta (pt-diff (.mouse-pos @*state*) (loc e))
          can-modify (show-control-poly?)]
      (register-mouse-loc! (loc e))
@@ -469,8 +460,9 @@
              (do (rassoc *state* [:drag-vertex] hover)
                  (dirty! :mode))
              (do (rassoc *view* [:rot-center]
-                         ((fworld<view pt+ (vec-neg vdelta)) (.rot-center @*view*)))
-                 (rassoc *state* [:drag-viewpoint?] true) ; remain or become true
+                         ((fworld<view pt+ (vec-neg vdelta))
+                          (.rot-center @*view*)))
+                 (rassoc *state* [:drag-viewpoint?] true) ;remain or become true
                  (dirty! :pose)))))))))
 
 (defn canvas-mouse-released
@@ -495,7 +487,7 @@
   (register-mouse-loc! (loc e))
   );TODO: scroll wheel zooms by adjusting zoom spinner
 
-;;;-- Components --;;;
+;;;; Components
 
 (defn enliven!
   "Add action listeners to GUI components."
@@ -539,7 +531,7 @@
          (componentResized [_]
            (clean! :canvas-shape)))))))
 
-;;;-- Setup --;;;
+;;;; Setup
 
 (defn make-cascade
   "Create an initial state cascade."
@@ -554,7 +546,7 @@
                :xform update-xform! [:pose :center]
                :mode update-mode! [:udata]
                :toolstate reflect-mode! [:mode]
-               :history-gui update-history-gui! true ; undo/redo has been committed
+               :history-gui update-history-gui! true ; undo/redo was committed
                ;;; top-level states
                :painting ask-redraw [:udata :xform :hover]
                :gui nil [:toolstate :history-gui]
