@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.1.1 (2011-03-16)
+
+Doc-only bugfix.
+
+### Bug fixes
+
+* Fixed :description in project.clj to refer to HW 3, not HW 1.
+
 ## v1.1.0 (2011-03-14)
 
 Post-submission enhancements.
