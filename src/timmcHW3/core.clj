@@ -9,7 +9,7 @@
   (:import [timmcHW3.user-data UserData])
   (:use timmcHW3.state)
   (:import [timmcHW3.state Viewpoint ProgState])
-  (:require [timmcHW3.cascade :as dirt])
+  (:require [org.timmc.cascade :as dirt])
   (:require [timmcHW3.history :as hist])
   (:import
    [javax.swing SwingUtilities UIManager
