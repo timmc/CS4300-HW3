@@ -24,25 +24,25 @@
     MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
   (:gen-class))
 
-(def ^{:doc "Collection of GUI components." :dynamic true}
+;; A lot of these should be atoms, and the earmuffs are also kind of
+;; inappropriate.
+(def ^{:doc "Collection of GUI components."}
   *gui* (ref nil))
-(def ^{:doc "The viewpoint's state." :dynamic true}
+(def ^{:doc "The viewpoint's state."}
   *view* (ref nil))
-(def ^{:doc "Tool and activity state." :dynamic true}
+(def ^{:doc "Tool and activity state."}
   *state* (ref nil))
-(def ^{:doc "User data that needs undo/redo." :dynamic true}
+(def ^{:doc "User data that needs undo/redo."}
   *udata* (ref nil))
-(def ^{:doc "Undo/redo buffers." :dynamic true}
+(def ^{:doc "Undo/redo buffers."}
   *history* (ref nil))
-(def ^{:doc "State dirtiness cascade." :dynamic true}
-  *cascade* (ref nil))
+(def ^{:doc "State dirtiness cascade."}
+  cascade (atom nil))
 
 (defn dirty!
   "Mark one or more pieces of state as dirty."
   [& kws]
-  (dosync
-   (alter *cascade* (partial reduce dirt/dirty) kws)
-   nil))
+  (apply swap! cascade dirt/dirty kws))
 
 (defn clean!
   "Clean up state and re-display where necessary."
@@ -50,9 +50,7 @@
      (apply dirty! kws)
      (clean!))
   ([]
-     (dosync
-      (alter *cascade* dirt/clean :all)
-      nil)))
+     (swap! cascade dirt/clean :all)))
 
 ;;;; Mode accessors
 
@@ -577,7 +575,7 @@
                       :view-minspect default-view-minspect
                       :view-rot default-view-rot}))
      (ref-set *udata* (udata/create))
-     (ref-set *cascade* (make-cascade))
+     (reset! cascade (make-cascade))
      (ref-set *history* (hist/create @*udata*)))
     (clean!)
     (enliven! *gui*)
