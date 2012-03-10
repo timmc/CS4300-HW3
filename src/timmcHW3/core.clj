@@ -1,5 +1,6 @@
 (ns timmcHW3.core
   "Core code. Use -main."
+  (:use [timmcHW3.persist :as persist])
   (:use [timmcHW3.utils])
   (:import [timmcHW3.utils Vec2])
   (:use [timmcHW3.drawing])
@@ -24,12 +25,18 @@
     MouseAdapter MouseEvent MouseMotionAdapter MouseWheelListener])
   (:gen-class))
 
-(def ^{:doc "Collection of GUI components."} *gui* (ref nil))
-(def ^{:doc "The viewpoint's state."} *view* (ref nil))
-(def ^{:doc "Tool and activity state."} *state* (ref nil))
-(def ^{:doc "User data that needs undo/redo."} *udata* (ref nil))
-(def ^{:doc "Undo/redo buffers."} *history* (ref nil))
-(def ^{:doc "State dirtiness cascade."} *cascade* (ref nil))
+(def ^{:doc "Collection of GUI components." :dynamic true}
+  *gui* (ref nil))
+(def ^{:doc "The viewpoint's state." :dynamic true}
+  *view* (ref nil))
+(def ^{:doc "Tool and activity state." :dynamic true}
+  *state* (ref nil))
+(def ^{:doc "User data that needs undo/redo." :dynamic true}
+  *udata* (ref nil))
+(def ^{:doc "Undo/redo buffers." :dynamic true}
+  *history* (ref nil))
+(def ^{:doc "State dirtiness cascade." :dynamic true}
+  *cascade* (ref nil))
 
 (defn dirty!
   "Mark one or more pieces of state as dirty."
@@ -459,6 +466,7 @@
            (if (and (not drag-view?) can-modify hover)
              (do (rassoc *state* [:drag-vertex] hover)
                  (dirty! :mode))
+             ;; Dragging scene one way == dragging viewpoint the other way
              (do (rassoc *view* [:rot-center]
                          ((fworld<view pt+ (vec-neg vdelta))
                           (.rot-center @*view*)))

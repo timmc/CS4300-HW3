@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.0 (???)
+
+Pending.
+
 ## v1.1.1 (2011-03-16)
 
 Doc-only bugfix.
