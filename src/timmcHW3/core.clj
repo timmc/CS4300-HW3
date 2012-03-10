@@ -1,6 +1,5 @@
 (ns timmcHW3.core
   "Core code. Use -main."
-  (:use [timmcHW3.persist :as persist])
   (:use [timmcHW3.utils])
   (:import [timmcHW3.utils Vec2])
   (:use [timmcHW3.drawing])
@@ -470,7 +469,8 @@
              (do (rassoc *view* [:rot-center]
                          ((fworld<view pt+ (vec-neg vdelta))
                           (.rot-center @*view*)))
-                 (rassoc *state* [:drag-viewpoint?] true) ;remain or become true
+                 ;; remain or become true
+                 (rassoc *state* [:drag-viewpoint?] true)
                  (dirty! :pose)))))))))
 
 (defn canvas-mouse-released
